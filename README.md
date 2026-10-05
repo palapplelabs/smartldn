@@ -1,5 +1,9 @@
 # SmartLDN
 
+**Live:** [labs.palapple.com/smartldn](https://labs.palapple.com/smartldn) · by Peter Choi, Anchor Point ([LinkedIn](https://www.linkedin.com/in/peterchoicm))
+
+![SmartLDN: TfL road corridors, Tube and rail lines, air quality sites and the ranked Intel panel over London](docs/smartldn.jpg)
+
 A live map of Greater London that puts the open data London already publishes in one place: the TfL road corridors, the Thames crossings, Tube, Elizabeth line, Overground, DLR, tram, bus and river arrivals, road works and incidents, traffic cameras, Santander Cycles, weather and flood warnings, air quality, planning applications, and the Congestion Charge and ULEZ zones.
 
 SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithligh/hk-traffic-intelligence) by [Keith Li](https://github.com/keithligh), a Hong Kong smart city dashboard released under the MIT License. The map engine, the moving trains, the stop plates and the ranked Intel panel are his work. The data layer, the layers and the copy were rebuilt for London.
