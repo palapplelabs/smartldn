@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { withBase } from "@/lib/base-path"
 import { nextReading } from "@/lib/last-reading"
 import { politeQueue } from "@/lib/polite-fetch"
 
@@ -28,7 +29,7 @@ export function useLiveJson<T extends { ok: boolean }>(url: string | null, inter
         await run(async () => {
           if (cancelled || request !== generation) return
           try {
-            const response = await fetch(url, { cache: "no-store", signal: controller.signal })
+            const response = await fetch(withBase(url), { cache: "no-store", signal: controller.signal })
             const body: unknown = await response.json()
             if (cancelled || request !== generation) return
             if (!hasOk(body)) {

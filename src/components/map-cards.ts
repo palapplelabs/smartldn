@@ -1,3 +1,4 @@
+import { withBase } from "@/lib/base-path"
 import { bandWord, formatStamp, type Messages } from "@/lib/i18n"
 import type { TrainSpot } from "@/lib/train-estimate"
 import { lineRecord, linesThrough, projectNetworkTrain, stationRecord, type RailMode } from "@/lib/rail-network"
@@ -155,7 +156,7 @@ function mountCrowding(body: HTMLElement, code: string, m: Messages) {
     paint(hit.percent)
     return
   }
-  void fetch(`/api/crowding?id=${encodeURIComponent(code)}`, { cache: "no-store" })
+  void fetch(withBase(`/api/crowding?id=${encodeURIComponent(code)}`), { cache: "no-store" })
     .then((response) => response.json())
     .then((payload: unknown) => {
       const percent =
@@ -218,7 +219,7 @@ export function busStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages)
     return card.root
   }
   card.body.replaceChildren(paragraph("city-card-copy", m.boardLoading))
-  void fetch(`/api/board?id=${encodeURIComponent(id)}`, { cache: "no-store" })
+  void fetch(withBase(`/api/board?id=${encodeURIComponent(id)}`), { cache: "no-store" })
     .then((response) => response.json())
     .then((payload: unknown) => {
       if (!card.body.isConnected) return

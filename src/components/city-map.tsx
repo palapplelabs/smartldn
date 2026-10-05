@@ -15,6 +15,7 @@ import {
 } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { useI18n } from "@/components/locale"
+import { withBase } from "@/lib/base-path"
 import {
   airPopup,
   busStopPopup,
@@ -42,7 +43,7 @@ import { advanceRuns, mergeRuns, runCollection, runsFromTrains, type TrainRun } 
 import type { AirSite, Basemap, BusResponse, BusVehicle, Corridor, CycleDock, PlanningApp, RailResponse, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
 
 // Turbopack rewrites MapLibre's own worker URL into a chunk the worker cannot run.
-setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
+setWorkerUrl(withBase("/maplibre/maplibre-gl-worker.mjs"))
 
 const BAND_COLOR: Record<SpeedBand, string> = {
   free: "#3DDC97",
