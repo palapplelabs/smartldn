@@ -1,24 +1,11 @@
-import { NextResponse, type NextRequest } from "next/server"
-import { isNewVisit, visitDay } from "@/lib/visit-day"
+import { NextResponse } from "next/server"
 import { recordPageView } from "@/lib/visits"
 
-const DAY_SECONDS = 60 * 60 * 36
-
-export function proxy(request: NextRequest) {
-  if (request.headers.get("sec-fetch-dest") !== "document") return NextResponse.next()
-  const day = visitDay(new Date())
-  const fresh = isNewVisit(request.cookies.get("smartldn-visit")?.value, day)
-  recordPageView(fresh ? "new" : "return")
-  const response = NextResponse.next()
-  if (!fresh) return response
-  response.cookies.set("smartldn-visit", day, {
-    httpOnly: true,
-    maxAge: DAY_SECONDS,
-    path: "/",
-    sameSite: "lax",
-    secure: true,
-  })
-  return response
+// Counts page opens only. No cookie and no identifier, so nothing is stored on
+// the visitor's device and no consent banner is needed.
+export function proxy(request: Request) {
+  if (request.headers.get("sec-fetch-dest") === "document") recordPageView()
+  return NextResponse.next()
 }
 
 export const config = {

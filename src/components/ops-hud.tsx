@@ -417,6 +417,7 @@ function ChangelogList() {
   }
   return (
     <ol className="flex flex-col gap-2">
+      <li className="border border-cyan-200/20 bg-cyan-300/5 px-2 py-1.5 text-xs leading-5 text-zinc-200">{m.independence}</li>
       {CHANGELOG.map((entry) => (
         <li key={entry.id} className="border border-white/10 bg-black/20 px-2 py-1.5">
           <p className="flex flex-wrap items-center gap-2 font-[family-name:var(--font-hud)] text-[0.62rem] tracking-[0.08em] text-cyan-100/80 uppercase">

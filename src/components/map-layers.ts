@@ -30,9 +30,9 @@ export const WATCH_HITS = [
 ]
 
 const MODE_STYLE: Record<RailMode, { station: string; ring: string; credit: string; minzoom: number }> = {
-  rail: { station: "#f7fbff", ring: "#041018", credit: "© Transport for London", minzoom: 0 },
-  light: { station: "#e6fffb", ring: "#00626a", credit: "© Transport for London", minzoom: 10 },
-  river: { station: "#e0f2fe", ring: "#0369a1", credit: "© Transport for London", minzoom: 10 },
+  rail: { station: "#f7fbff", ring: "#041018", credit: "Powered by TfL Open Data", minzoom: 0 },
+  light: { station: "#e6fffb", ring: "#00626a", credit: "Powered by TfL Open Data", minzoom: 10 },
+  river: { station: "#e0f2fe", ring: "#0369a1", credit: "Powered by TfL Open Data", minzoom: 10 },
 }
 
 export function layerIds(kind: WatchLayer): string[] {
@@ -67,7 +67,7 @@ export function layerIds(kind: WatchLayer): string[] {
 }
 
 export function mountDataLayers(map: Map) {
-  map.addSource("corridors", { type: "geojson", data: EMPTY, attribution: "© Transport for London | © OpenStreetMap" })
+  map.addSource("corridors", { type: "geojson", data: EMPTY, attribution: "Powered by TfL Open Data | © OpenStreetMap" })
   map.addSource("particles", { type: "geojson", data: EMPTY })
   map.addSource("cameras", { type: "geojson", data: EMPTY })
   map.addSource("works", { type: "geojson", data: EMPTY })

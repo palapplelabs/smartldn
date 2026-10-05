@@ -30,6 +30,7 @@ export const MESSAGES = {
   roads: "Roads",
   systems: "Systems",
   changelog: "Updates",
+  independence: "SmartLDN is an independent open-source project. It is not an official TfL, Greater London Authority or Met Office service. Powered by TfL Open Data; train positions outside the Tube are estimates. Check TfL before you travel.",
   changelogAdded: "Added",
   changelogFixed: "Fixed",
   changelogImproved: "Improved",

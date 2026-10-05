@@ -72,16 +72,32 @@ Open [http://127.0.0.1:4317](http://127.0.0.1:4317). Put a free TfL key from [ap
 The site runs as a Cloudflare Worker (vinext). Every visitor reads one shared copy of each feed: trains about every fifteen seconds, road status and line status every minute, disruptions every two minutes, and the rest less often. Upstream services see the same traffic whether one person or a thousand have the map open.
 
 1. Set `TFL_APP_KEY`, `BODS_API_KEY`, `METOFFICE_NSWWS_KEY` and `METOFFICE_SITE_KEY` as Worker secrets: `npx wrangler secret put TFL_APP_KEY`, and the same for the others.
-2. Optional: create a KV namespace for the daily visit counter and set `SMARTLDN_VISITS_KV_ID` before building (see `cloudflare.config.ts`).
+2. Optional: create a KV namespace for the daily page-open counter and set `SMARTLDN_VISITS_KV_ID` before building (see `cloudflare.config.ts`). It counts opens only, without cookies.
 3. Build and deploy with `npm run build:vinext`, then deploy through your usual Wrangler flow.
 
 The Tube, Elizabeth line and Overground arrivals, and the London bus positions, are each several megabytes per refresh, so the Workers Paid plan's CPU allowance is the comfortable fit.
 
-## Not yet included
+## Known limits
 
-These need a registration, a server endpoint that receives pushed data, or both, and are planned for a later phase:
+These are worth knowing before relying on the map:
 
-- Every borough street-works permit from DfT [Street Manager](https://department-for-transport-streetmanager.github.io/street-manager-docs/open-data/) open data (registration and a webhook).
+- **Road colours are a status, not a speed.** TfL publishes Good, Serious, Severe or Closed for 24 corridors and no live road speeds. A few central corridors (Inner Ring, City Route, the cross routes) are drawn from the road numbers they are signed on, so their shapes are approximate.
+- **Train positions outside the Tube are estimates.** Tube and Elizabeth line trains are followed by the train number TfL publishes; DLR, Overground, tram and river positions are worked out from the published minutes and the distance between stations. Rail lines are drawn straight between stations.
+- **Buses lag by up to about a minute.** Each bus reports every 10 to 30 seconds and the feed is read every 20 seconds. About one London bus in four has no TfL stop predictions (out of service or finishing a trip).
+- **The Thames crossings have no journey times.** None is published as open data; each crossing shows its TfL status or the notices that name it.
+- **Accessibility is partial and not yet audited.** The panels, tabs and controls are real buttons and tabs that work from the keyboard, but the map itself is visual. Everything urgent is also listed as text in the Intel panel.
+
+## Roadmap
+
+- Every borough street-works permit from DfT [Street Manager](https://department-for-transport-streetmanager.github.io/street-manager-docs/open-data/) open data. The receiver is built (`/api/streetworks/sns`); the map layer follows once the feed is approved.
+- Road-following track shapes for the DLR, Overground and Elizabeth line.
+- Met Office hourly extras in the Weather tab: chance of rain, wind gusts, UV.
+
+## Independence, privacy and attribution
+
+SmartLDN is an independent open-source project. It is not an official TfL, Greater London Authority or Met Office service; check TfL before you travel. Powered by TfL Open Data. Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+
+The site sets no cookies and keeps no identifiers. It counts page opens per day, and nothing about who opened them. Your layer and basemap choices are kept in your own browser so the map opens the way you left it. Map tiles load from OpenFreeMap and Esri, which see the request as any tile server does.
 
 ## License and credit
 

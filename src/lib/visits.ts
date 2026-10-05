@@ -31,19 +31,18 @@ function workerRuntime(): Promise<WorkerRuntime | null> {
   return runtime
 }
 
-export function recordPageView(mark: string | null, now = new Date()): void {
-  if (mark !== "new" && mark !== "return") return
+export function recordPageView(now = new Date()): void {
   const day = visitDay(now)
   void workerRuntime().then((worker) => {
     if (!worker) return
     try {
-      worker.env.VISITS?.writeDataPoint({ indexes: [day], blobs: [mark], doubles: [1] })
+      worker.env.VISITS?.writeDataPoint({ indexes: [day], blobs: ["open"], doubles: [1] })
     } catch {
       // A missed tally must not stop the page.
     }
     const counts = worker.env.VISIT_COUNTS
     if (!counts) return
-    const saved = saveVisit(counts, day, mark)
+    const saved = saveVisit(counts, day)
     try {
       worker.waitUntil(saved)
     } catch {
@@ -52,9 +51,9 @@ export function recordPageView(mark: string | null, now = new Date()): void {
   })
 }
 
-async function saveVisit(counts: VisitCounts, day: string, mark: "new" | "return"): Promise<void> {
+async function saveVisit(counts: VisitCounts, day: string): Promise<void> {
   try {
-    const days = addVisit(parseVisitDays(await counts.get(VISIT_DAYS_KEY)), day, mark)
+    const days = addVisit(parseVisitDays(await counts.get(VISIT_DAYS_KEY)), day)
     await counts.put(VISIT_DAYS_KEY, JSON.stringify(days))
   } catch {
     // The page is already on its way.
