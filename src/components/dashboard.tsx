@@ -167,24 +167,13 @@ export function Dashboard() {
         data-map-chrome="bottom"
         className="pointer-events-auto absolute bottom-1 left-2 z-30 max-w-[calc(100%-1rem)] bg-[#041018]/92 px-2 py-1 font-[family-name:var(--font-hud)] text-[0.72rem] leading-snug text-white sm:bottom-[0.4rem] sm:left-3 sm:max-w-[min(26rem,calc(100%-26rem))] sm:whitespace-nowrap"
       >
-        {m.creditBy}{" "}
-        <a
-          href="https://www.linkedin.com/in/keithlihk"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-cyan-100 underline decoration-cyan-200/60 underline-offset-2"
-        >
-          {m.creditLinkedIn}
-        </a>
-        {" / "}
-        <a
-          href="https://github.com/keithligh/hk-traffic-intelligence"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-cyan-100 underline decoration-cyan-200/60 underline-offset-2"
-        >
-          {m.creditGitHub}
-        </a>
+        <span className="block">
+          {m.creditOwner} <CreditLink href="https://www.linkedin.com/in/peterchoicm">{m.creditLinkedIn}</CreditLink>
+        </span>
+        <span className="block">
+          {m.creditBuiltOn} <CreditLink href="https://github.com/keithligh/hk-traffic-intelligence">{m.creditUpstream}</CreditLink>{" "}
+          {m.creditUpstreamAuthor} <CreditLink href="https://www.linkedin.com/in/keithlihk">{m.creditLinkedIn}</CreditLink>
+        </span>
       </p>
       <LayerDock
         layers={layers}
@@ -200,5 +189,13 @@ export function Dashboard() {
         aboveMarquee={!prefs.intelOpen}
       />
     </main>
+  )
+}
+
+function CreditLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-cyan-100 underline decoration-cyan-200/60 underline-offset-2">
+      {children}
+    </a>
   )
 }
