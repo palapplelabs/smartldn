@@ -32,6 +32,8 @@ export function parseSiriVm(xml: string, now: number): BusVehicle[] {
       lat: round(lat),
       bearing: tag(record, "Bearing") && Number.isFinite(bearing) ? Math.round(bearing) : null,
       at,
+      origin: place(tag(record, "OriginName")),
+      departed: tag(record, "OriginAimedDepartureTime"),
     })
   }
   return vehicles

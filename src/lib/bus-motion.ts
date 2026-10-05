@@ -46,7 +46,7 @@ export function busMotionCollection(motions: BusMotions, now: number): GeoJSON.F
     const { vehicle } = motion
     features.push({
       type: "Feature",
-      properties: { id: vehicle.id, route: vehicle.route, dest: vehicle.dest, operator: vehicle.operator, at: vehicle.at },
+      properties: { id: vehicle.id, route: vehicle.route, dest: vehicle.dest, operator: vehicle.operator, at: vehicle.at, origin: vehicle.origin, departed: vehicle.departed },
       geometry: { type: "Point", coordinates: busPosition(motion, now) },
     })
   }

@@ -52,7 +52,7 @@ export function layerIds(kind: WatchLayer): string[] {
     case "river":
       return [`${kind}-track-casing`, `${kind}-track`, `${kind}-stations`, `${kind}-station-label`, `${kind}-trains`, `${kind}-train-label`]
     case "bus":
-      return ["bus-stops", "bus-stop-label", "bus-vehicles", "bus-vehicle-label"]
+      return ["bus-trip-route", "bus-trip-stops", "bus-stops", "bus-stop-label", "bus-vehicles", "bus-vehicle-label"]
     case "cycles":
       return ["cycles"]
     case "planning":
@@ -83,6 +83,7 @@ export function mountDataLayers(map: Map) {
   }
   map.addSource("bus-stops", { type: "geojson", data: EMPTY })
   map.addSource("bus-vehicles", { type: "geojson", data: EMPTY, attribution: "© Bus Open Data Service (DfT)" })
+  map.addSource("bus-trip", { type: "geojson", data: EMPTY })
   map.addSource("bus-vehicle-labels", { type: "geojson", data: EMPTY })
   map.addSource("cycles", { type: "geojson", data: EMPTY })
   map.addSource("planning", { type: "geojson", data: EMPTY, attribution: "© Greater London Authority" })
@@ -261,6 +262,28 @@ function addPointLayers(map: Map, before: string | undefined) {
     },
   }, before)
   addStopLabel(map, "bus-stop-label", "bus-stops", LABEL_MIN_ZOOM, false)
+  // The route and next stops of the bus whose card is open.
+  addOverlay(map, {
+    id: "bus-trip-route",
+    type: "line",
+    source: "bus-trip",
+    filter: ["==", ["get", "kind"], "route"],
+    paint: { "line-color": "#DC241F", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 3, 16, 6], "line-opacity": 0.55 },
+    layout: { "line-cap": "round", "line-join": "round" },
+  }, before)
+  addOverlay(map, {
+    id: "bus-trip-stops",
+    type: "circle",
+    source: "bus-trip",
+    filter: ["==", ["get", "kind"], "stop"],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4, 16, 7],
+      "circle-color": "#ffffff",
+      "circle-stroke-color": "#DC241F",
+      "circle-stroke-width": 2.5,
+      "circle-pitch-alignment": "map",
+    },
+  }, before)
   addOverlay(map, {
     id: "bus-vehicles",
     type: "circle",

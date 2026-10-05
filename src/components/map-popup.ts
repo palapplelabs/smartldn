@@ -31,7 +31,8 @@ export function holdDataCreditOpen(map: Map) {
   })
 }
 
-export function popupOpener(map: Map) {
+// onClose runs whenever a card goes away, so anything a card drew can be cleared.
+export function popupOpener(map: Map, onClose?: () => void) {
   let active: Popup | null = null
   return {
     show(lngLat: LngLat, content: HTMLElement) {
@@ -40,6 +41,7 @@ export function popupOpener(map: Map) {
         .setLngLat(lngLat)
         .setDOMContent(content)
         .addTo(map)
+      if (onClose) active.once("close", onClose)
       keepCardInView(map, active)
     },
     close() {

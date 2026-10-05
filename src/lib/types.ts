@@ -190,6 +190,32 @@ export type BusVehicle = {
   lat: number
   bearing: number | null
   at: number
+  origin: string
+  departed: string
+}
+
+export type VehicleStop = {
+  id: string
+  name: string
+  indicator: string
+  minutes: number
+  lng: number | null
+  lat: number | null
+}
+
+export type VehicleTrip = {
+  line: string
+  lineName: string
+  direction: "inbound" | "outbound"
+  dest: string
+  stops: VehicleStop[]
+  route: [number, number][][]
+}
+
+export type VehicleTripResponse = {
+  ok: boolean
+  error?: string
+  trip: VehicleTrip | null
 }
 
 export type BusVehiclesResponse = {

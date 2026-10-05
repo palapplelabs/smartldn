@@ -6,7 +6,8 @@ import { isJamCamUrl } from "@/lib/jamcams"
 import { isSpeedBand } from "@/lib/speed"
 import { clearBoardFault, markBoardFault } from "@/lib/board-status"
 import { routesWithoutArrival } from "@/lib/stop-routes"
-import type { BusCall, LineStatus, LiftOutage, RailCalling, RailResponse, SpeedBand } from "@/lib/types"
+import type { BusCall, LineStatus, LiftOutage, RailCalling, RailResponse, SpeedBand, VehicleTrip } from "@/lib/types"
+import { tripCollection } from "@/lib/vehicle-trip"
 
 export type TransitContext = { lines: LineStatus[]; lifts: LiftOutage[] }
 
@@ -288,16 +289,53 @@ function readBusCalls(payload: unknown): BusCall[] | null {
   })
 }
 
-export function busVehiclePopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+const NEXT_STOPS = 6
+
+export function busVehiclePopup(properties: GeoJSON.GeoJsonProperties, m: Messages, showTrip?: (trip: GeoJSON.FeatureCollection) => void): HTMLElement {
   const route = textProp(properties, "route")
   const dest = textProp(properties, "dest")
   const card = openCard([route, dest ? m.towards(dest) : ""].filter(Boolean).join(" ") || m.bus)
   const operator = textProp(properties, "operator")
   if (operator) card.body.append(fact(m.busOperatorLabel, operator === "TFLO" ? m.londonBuses : operator))
+  const origin = textProp(properties, "origin")
+  const departed = formatStamp(textProp(properties, "departed"))
+  if (origin) card.body.append(fact(m.busStarted, departed ? m.busStartedAt(origin, departed.split(" ").pop() ?? departed) : origin))
   const at = numberProp(properties, "at")
   if (at != null) card.body.append(fact(m.busReportedLabel, m.busReported(Math.max(0, Math.round((Date.now() - at) / 1000)))))
+  // TfL predicts stops by the same registration the position feed carries.
+  const reg = textProp(properties, "id").split(":")[1] ?? ""
+  if (operator === "TFLO" && reg) {
+    const stops = document.createElement("div")
+    stops.className = "city-card-board"
+    stops.append(paragraph("city-card-copy", m.boardLoading))
+    card.body.append(stops)
+    void fetch(withBase(`/api/vehicle?reg=${encodeURIComponent(reg)}`), { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload: unknown) => {
+        if (!stops.isConnected) return
+        const trip = readTrip(payload)
+        if (!trip || trip.stops.length === 0) {
+          stops.replaceChildren(paragraph("city-card-copy", m.busNoStops))
+          return
+        }
+        stops.replaceChildren(paragraph("city-card-section", m.busNextStops))
+        for (const stop of trip.stops.slice(0, NEXT_STOPS)) {
+          stops.append(serviceRow(stop.indicator ? `${stop.name} (${stop.indicator})` : stop.name, stop.minutes <= 0 ? m.railArriving : m.minutes(stop.minutes)))
+        }
+        showTrip?.(tripCollection(trip, NEXT_STOPS))
+      })
+      .catch(() => {
+        if (stops.isConnected) stops.replaceChildren(paragraph("city-card-copy", m.busNoStops))
+      })
+  }
   card.body.append(paragraph("city-card-aside", m.busMethod))
   return card.root
+}
+
+function readTrip(payload: unknown): VehicleTrip | null {
+  if (typeof payload !== "object" || payload === null || !("ok" in payload) || payload.ok !== true || !("trip" in payload)) return null
+  const trip = payload.trip as VehicleTrip | null
+  return trip && Array.isArray(trip.stops) && Array.isArray(trip.route) ? trip : null
 }
 
 export function cyclePopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {

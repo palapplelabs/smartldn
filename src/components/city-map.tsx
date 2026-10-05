@@ -379,7 +379,7 @@ export function CityMap({
       if (isGpuFailure(event.error)) dropMap()
     })
 
-    const cards = popupOpener(map)
+    const cards = popupOpener(map, () => geoJsonSource(map, "bus-trip")?.setData(emptyCollection()))
     closeCardRef.current = cards.close
     const restoreOverlays = () => {
       mountDataLayers(map)
@@ -719,7 +719,7 @@ function busPlates(map: Map, motions: BusMotions, m: Messages): GeoJSON.FeatureC
     if (!icon) continue
     features.push({
       type: "Feature",
-      properties: { id: vehicle.id, route: vehicle.route, dest: vehicle.dest, operator: vehicle.operator, at: vehicle.at, icon },
+      properties: { id: vehicle.id, route: vehicle.route, dest: vehicle.dest, operator: vehicle.operator, at: vehicle.at, origin: vehicle.origin, departed: vehicle.departed, icon },
       geometry: { type: "Point", coordinates: position },
     })
   }
@@ -850,6 +850,7 @@ function bindOverlayClicks(
   transitRef: MutableRefObject<TransitContext>,
 ) {
   const watchLayers = WATCH_HITS.filter((layerId) => map.getLayer(layerId))
+  const showTrip = (trip: GeoJSON.FeatureCollection) => geoJsonSource(map, "bus-trip")?.setData(trip)
   map.on("click", "corridor-line", (event: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
     if (watchLayers.length > 0 && map.queryRenderedFeatures(event.point, { layers: watchLayers }).length > 0) return
     const feature = event.features?.[0]
@@ -862,8 +863,8 @@ function bindOverlayClicks(
     "charge-points": (properties) => chargePopup(properties, copyRef.current),
     "bus-stops": (properties) => busStopPopup(properties, copyRef.current),
     "bus-stop-label": (properties) => busStopPopup(properties, copyRef.current),
-    "bus-vehicles": (properties) => busVehiclePopup(properties, copyRef.current),
-    "bus-vehicle-label": (properties) => busVehiclePopup(properties, copyRef.current),
+    "bus-vehicles": (properties) => busVehiclePopup(properties, copyRef.current, showTrip),
+    "bus-vehicle-label": (properties) => busVehiclePopup(properties, copyRef.current, showTrip),
     cycles: (properties) => cyclePopup(properties, copyRef.current),
     planning: (properties) => planningPopup(properties, copyRef.current),
     air: (properties) => airPopup(properties, copyRef.current),
