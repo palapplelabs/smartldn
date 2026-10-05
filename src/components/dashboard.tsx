@@ -10,13 +10,14 @@ import { useI18n } from "@/components/locale"
 import { boardFaultSnapshot, subscribeBoardFaults } from "@/lib/board-status"
 import { thamesCrossings } from "@/lib/crossings"
 import type { FeedFaults } from "@/lib/intel"
-import { PLACE_POLL_MS, placePinZoom } from "@/lib/map-view"
+import { BUS_MIN_ZOOM, PLACE_POLL_MS, busViewQuery, placePinZoom, type MapView } from "@/lib/map-view"
 import { catalogueBoards } from "@/lib/place-arrivals"
 import { preferenceServerSnapshot, preferenceSnapshot, soleLayer, subscribePreferences, updatePreference } from "@/lib/preferences"
 import type {
   AirResponse,
   Basemap,
   BusPlacesResponse,
+  BusVehiclesResponse,
   CamerasResponse,
   CyclesResponse,
   DisruptionsResponse,
@@ -41,7 +42,7 @@ export function Dashboard() {
   const prefs = useSyncExternalStore(subscribePreferences, preferenceSnapshot, preferenceServerSnapshot)
   const [flyToken, setFlyToken] = useState(0)
   const [mapLive, setMapLive] = useState(!mapDown)
-  const [view, setView] = useState<{ lng: number; lat: number; zoom: number } | null>(null)
+  const [view, setView] = useState<MapView | null>(null)
   const [focus, setFocus] = useState<{ id: string; coordinates: [number, number] } | null>(null)
   const layers = prefs.layers
   const basemap = prefs.basemap
@@ -64,6 +65,8 @@ export function Dashboard() {
   const busQuery = viewQuery("bus")
   const planningQuery = viewQuery("planning")
   const busLive = useLiveJson<BusPlacesResponse>(layers.bus && busQuery ? `/api/bus/places?${busQuery}` : null, PLACE_POLL_MS)
+  const busesUrl = layers.bus && view && view.zoom >= BUS_MIN_ZOOM ? `/api/buses?${busViewQuery(view)}` : null
+  const busesLive = useLiveJson<BusVehiclesResponse>(busesUrl, 20_000)
   const planningLive = useLiveJson<PlanningResponse>(layers.planning && planningQuery ? `/api/planning?${planningQuery}` : null, PLACE_POLL_MS)
   const boardFaults = useSyncExternalStore(subscribeBoardFaults, boardFaultSnapshot, boardFaultSnapshot)
 
@@ -98,6 +101,7 @@ export function Dashboard() {
     rail: liveError(railLive.error, railLive.data, "Arrivals failed"),
     light: liveError(lightLive.error, lightLive.data, "Arrivals failed"),
     river: liveError(riverLive.error, riverLive.data, "Arrivals failed"),
+    buses: liveError(busesLive.error, busesLive.data, "Bus positions failed"),
     cycles: liveError(cyclesLive.error, cyclesLive.data, "Cycle docks failed"),
     air: liveError(airLive.error, airLive.data, "Air quality failed"),
     planning: liveError(planningLive.error, planningLive.data, "Planning failed"),
@@ -126,6 +130,7 @@ export function Dashboard() {
         rail={rail}
         transit={transit}
         bus={bus}
+        buses={busesLive.data?.ok ? busesLive.data.vehicles : null}
         cycles={cyclesLive.data?.ok ? cyclesLive.data.docks : null}
         planning={planningLive.data?.ok ? planningLive.data.apps : null}
         air={airLive.data?.ok ? airLive.data.sites : null}

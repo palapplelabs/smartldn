@@ -178,6 +178,24 @@ export type BusResponse = {
   stops: BusStopBoard[]
 }
 
+export type BusVehicle = {
+  id: string
+  route: string
+  dest: string
+  operator: string
+  lng: number
+  lat: number
+  bearing: number | null
+  at: number
+}
+
+export type BusVehiclesResponse = {
+  ok: boolean
+  error?: string
+  observedAt: string | null
+  vehicles: BusVehicle[]
+}
+
 export type CycleDock = {
   id: string
   name: string

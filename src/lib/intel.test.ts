@@ -12,6 +12,7 @@ const noFaults = {
   rail: null,
   light: null,
   river: null,
+  buses: null,
   cycles: null,
   air: null,
   planning: null,

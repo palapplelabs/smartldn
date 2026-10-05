@@ -11,6 +11,12 @@ export type ChangelogEntry = {
 // the upstream project, HK Traffic Intelligence.
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    id: "2026-10-05-live-buses",
+    date: "2026-10-05",
+    kind: "added",
+    text: "Buses now move on the map from their live positions, with the route and destination on each bus at street level. Name plates for stops, stations and trains also show on the Streets and Buildings maps.",
+  },
+  {
     id: "2026-10-05-london",
     date: "2026-10-05",
     kind: "added",

@@ -287,6 +287,18 @@ function readBusCalls(payload: unknown): BusCall[] | null {
   })
 }
 
+export function busVehiclePopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+  const route = textProp(properties, "route")
+  const dest = textProp(properties, "dest")
+  const card = openCard([route, dest ? m.towards(dest) : ""].filter(Boolean).join(" ") || m.bus)
+  const operator = textProp(properties, "operator")
+  if (operator) card.body.append(fact(m.busOperatorLabel, operator === "TFLO" ? m.londonBuses : operator))
+  const at = numberProp(properties, "at")
+  if (at != null) card.body.append(fact(m.busReportedLabel, m.busReported(Math.max(0, Math.round((Date.now() - at) / 1000)))))
+  card.body.append(paragraph("city-card-aside", m.busMethod))
+  return card.root
+}
+
 export function cyclePopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
   const card = openCard(textProp(properties, "name") || m.cycles)
   card.body.append(

@@ -1,6 +1,6 @@
 # SmartLDN — Hong Kong → Greater London data mapping
 
-Status: decisions taken 2026-10-05 (see §7). Phase 1 port done on branch london-port; BODS bus positions, Street Manager and Met Office DataHub are phase 2.
+Status: decisions taken 2026-10-05 (see §7). Phase 1 port done on branch london-port; BODS live bus positions added. Street Manager and Met Office DataHub remain for phase 2.
 Date of research: 2026-10-05. Every "Verified" endpoint below was called live on that date.
 
 ---

@@ -1,7 +1,7 @@
 import type { FilterSpecification, Map } from "maplibre-gl"
 import chargeZones from "../../data/charge-zones.json"
 import { cameraCone, incidentMark } from "@/components/map-icons"
-import { STOP_MIN_ZOOM } from "@/lib/map-view"
+import { BUS_MIN_ZOOM, STOP_MIN_ZOOM } from "@/lib/map-view"
 import { stationCollection, trackCollection, type RailMode } from "@/lib/rail-network"
 import { CHARGE_POINTS } from "@/lib/crossings"
 import type { WatchLayer } from "@/lib/types"
@@ -22,6 +22,8 @@ export const WATCH_HITS = [
   ...RAIL_MODES.flatMap((mode) => [`${mode}-stations`, `${mode}-station-label`, `${mode}-trains`, `${mode}-train-label`]),
   "bus-stops",
   "bus-stop-label",
+  "bus-vehicles",
+  "bus-vehicle-label",
   "cycles",
   "planning",
   "air",
@@ -50,7 +52,7 @@ export function layerIds(kind: WatchLayer): string[] {
     case "river":
       return [`${kind}-track-casing`, `${kind}-track`, `${kind}-stations`, `${kind}-station-label`, `${kind}-trains`, `${kind}-train-label`]
     case "bus":
-      return ["bus-stops", "bus-stop-label"]
+      return ["bus-stops", "bus-stop-label", "bus-vehicles", "bus-vehicle-label"]
     case "cycles":
       return ["cycles"]
     case "planning":
@@ -79,6 +81,8 @@ export function mountDataLayers(map: Map) {
     map.addSource(`${mode}-train-labels`, { type: "geojson", data: EMPTY })
   }
   map.addSource("bus-stops", { type: "geojson", data: EMPTY })
+  map.addSource("bus-vehicles", { type: "geojson", data: EMPTY, attribution: "© Bus Open Data Service (DfT)" })
+  map.addSource("bus-vehicle-labels", { type: "geojson", data: EMPTY })
   map.addSource("cycles", { type: "geojson", data: EMPTY })
   map.addSource("planning", { type: "geojson", data: EMPTY, attribution: "© Greater London Authority" })
   map.addSource("air", { type: "geojson", data: EMPTY, attribution: "© Imperial College London" })
@@ -236,7 +240,21 @@ function addPointLayers(map: Map, before: string | undefined) {
       "circle-pitch-alignment": "map",
     },
   }, before)
-  addStopLabel(map, "bus-stop-label", "bus-stops", before, LABEL_MIN_ZOOM, false)
+  addStopLabel(map, "bus-stop-label", "bus-stops", LABEL_MIN_ZOOM, false)
+  addOverlay(map, {
+    id: "bus-vehicles",
+    type: "circle",
+    source: "bus-vehicles",
+    minzoom: BUS_MIN_ZOOM,
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2.4, 15, 4.5, 17, 6.5],
+      "circle-color": ["case", ["==", ["get", "operator"], "TFLO"], "#DC241F", "#F59E0B"],
+      "circle-stroke-color": "#f7fbff",
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 12, 0.6, 16, 1.4],
+      "circle-pitch-alignment": "map",
+    },
+  }, before)
+  addStopLabel(map, "bus-vehicle-label", "bus-vehicle-labels", LABEL_MIN_ZOOM, false)
   addOverlay(map, {
     id: "cycles",
     type: "circle",
@@ -319,7 +337,7 @@ function addRailLayers(map: Map, mode: RailMode, before: string | undefined) {
       "circle-pitch-alignment": "map",
     },
   }, before)
-  addStopLabel(map, `${mode}-station-label`, `${mode}-stations`, before)
+  addStopLabel(map, `${mode}-station-label`, `${mode}-stations`)
   addOverlay(map, {
     id: `${mode}-trains`,
     type: "circle",
@@ -332,7 +350,7 @@ function addRailLayers(map: Map, mode: RailMode, before: string | undefined) {
       "circle-pitch-alignment": "map",
     },
   }, before)
-  addStopLabel(map, `${mode}-train-label`, `${mode}-train-labels`, before)
+  addStopLabel(map, `${mode}-train-label`, `${mode}-train-labels`)
 }
 
 function overlaySlot(map: Map): string | undefined {
@@ -348,8 +366,10 @@ function addOverlay(map: Map, layer: Parameters<Map["addLayer"]>[0], before: str
   else map.addLayer(layer)
 }
 
-function addStopLabel(map: Map, id: string, source: string, before: string | undefined, minzoom = LABEL_MIN_ZOOM, allowOverlap = true) {
-  addOverlay(map, {
+// Plates go on top of the whole style. Below the basemap's labels they lose every
+// collision on Streets and Buildings, where street names and shop labels sit.
+function addStopLabel(map: Map, id: string, source: string, minzoom = LABEL_MIN_ZOOM, allowOverlap = true) {
+  map.addLayer({
     id,
     type: "symbol",
     source,
@@ -364,5 +384,5 @@ function addStopLabel(map: Map, id: string, source: string, before: string | und
       "icon-pitch-alignment": "viewport",
       "icon-rotation-alignment": "viewport",
     },
-  }, before)
+  })
 }

@@ -12,7 +12,7 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 
 **Rail.** Tube, Elizabeth line and Overground trains move along their lines, together with DLR, trams and the Uber Boat river buses. Tube and Elizabeth line trains are followed by the train number TfL publishes. Elsewhere a train's position is estimated from the published minutes and the distance between stations, because TfL does not publish one. Station cards show the next departures, the line status, lift outages and, for Tube stations, how busy the station is against a usual day.
 
-**Buses.** At street level, bus stops show their routes, and a stop card reads the live arrivals.
+**Buses.** From district zoom, every bus in view moves on the map from its live GPS position, gliding between reports, with its route and destination on a plate at street level. Bus stops show their routes, and a stop card reads the live arrivals.
 
 **City.** Santander Cycles docks are coloured by bikes available. Air quality comes from the London Air Quality Network. Planning applications from all 35 London planning authorities show sites where work has started, and applications validated in the last four months. The Congestion Charge zone, the London-wide ULEZ, and the Dartford, Blackwall and Silvertown charge points are drawn as a reference layer.
 
@@ -34,6 +34,7 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 | Lift outages | TfL `/Disruptions/Lifts/v2` |
 | Station busyness | TfL `/Crowding/{naptan}/Live` |
 | Bus stops and arrivals | TfL `/StopPoint` search and `/StopPoint/{id}/Arrivals` |
+| Live bus positions | DfT [Bus Open Data Service](https://data.bus-data.dft.gov.uk) SIRI-VM, filtered to Greater London (TfL buses report as operator TFLO) |
 | Santander Cycles | TfL `/BikePoint` |
 | Weather warnings | [Met Office warnings RSS, London & South East](https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/se) |
 | Flood warnings and rainfall | Environment Agency [real-time flood-monitoring API](https://environment.data.gov.uk/flood-monitoring/doc/reference) |
@@ -56,7 +57,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://127.0.0.1:4317](http://127.0.0.1:4317). Put a free TfL key from [api-portal.tfl.gov.uk](https://api-portal.tfl.gov.uk) in `.env.local` as `TFL_APP_KEY`. It runs without one, but TfL limits anonymous use to about 50 requests a minute.
+Open [http://127.0.0.1:4317](http://127.0.0.1:4317). Put a free TfL key from [api-portal.tfl.gov.uk](https://api-portal.tfl.gov.uk) in `.env.local` as `TFL_APP_KEY`. It runs without one, but TfL limits anonymous use to about 50 requests a minute. Live bus positions need a free key from the [Bus Open Data Service](https://data.bus-data.dft.gov.uk/account/signup/) as `BODS_API_KEY`; without it the map shows stops and arrivals but no moving buses.
 
 | Command | What it does |
 | --- | --- |
@@ -70,17 +71,16 @@ Open [http://127.0.0.1:4317](http://127.0.0.1:4317). Put a free TfL key from [ap
 
 The site runs as a Cloudflare Worker (vinext). Every visitor reads one shared copy of each feed: trains about every fifteen seconds, road status and line status every minute, disruptions every two minutes, and the rest less often. Upstream services see the same traffic whether one person or a thousand have the map open.
 
-1. Set `TFL_APP_KEY` as a Worker secret: `npx wrangler secret put TFL_APP_KEY`.
+1. Set `TFL_APP_KEY` and `BODS_API_KEY` as Worker secrets: `npx wrangler secret put TFL_APP_KEY`, and the same for `BODS_API_KEY`.
 2. Optional: create a KV namespace for the daily visit counter and set `SMARTLDN_VISITS_KV_ID` before building (see `cloudflare.config.ts`).
 3. Build and deploy with `npm run build:vinext`, then deploy through your usual Wrangler flow.
 
-The Tube, Elizabeth line and Overground arrivals are several megabytes per refresh, so the Workers Paid plan's CPU allowance is the comfortable fit.
+The Tube, Elizabeth line and Overground arrivals, and the London bus positions, are each several megabytes per refresh, so the Workers Paid plan's CPU allowance is the comfortable fit.
 
 ## Not yet included
 
 These need a registration, a server endpoint that receives pushed data, or both, and are planned for a later phase:
 
-- Live bus GPS positions from the DfT [Bus Open Data Service](https://data.bus-data.dft.gov.uk) (free key).
 - Every borough street-works permit from DfT [Street Manager](https://department-for-transport-streetmanager.github.io/street-manager-docs/open-data/) open data (registration and a webhook).
 - Met Office DataHub observations in place of Open-Meteo (free key).
 

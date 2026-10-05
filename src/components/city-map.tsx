@@ -18,6 +18,7 @@ import { useI18n } from "@/components/locale"
 import {
   airPopup,
   busStopPopup,
+  busVehiclePopup,
   cameraPopup,
   chargePopup,
   corridorPopup,
@@ -31,13 +32,14 @@ import {
 import { placeStopPlate } from "@/components/map-icons"
 import { LABEL_MIN_ZOOM, RAIL_MODES, WATCH_HITS, layerIds, mountDataLayers } from "@/components/map-layers"
 import { holdDataCreditOpen, openFeature, popupOpener } from "@/components/map-popup"
-import { mapViewKey, placePinZoom } from "@/lib/map-view"
+import { BUS_MIN_ZOOM, mapViewKey, placePinZoom, type MapView } from "@/lib/map-view"
+import { busMotionCollection, busPosition, noBusMotion, syncBusMotion, type BusMotions } from "@/lib/bus-motion"
 import { soleLayer } from "@/lib/preferences"
 import type { Messages } from "@/lib/i18n"
 import { lineRecord, linesThrough, stationCollection, stationPoint, stationRecord, type RailMode } from "@/lib/rail-network"
 import { beginPush, endPush, type PushGate } from "@/lib/frame-push"
 import { advanceRuns, mergeRuns, runCollection, runsFromTrains, type TrainRun } from "@/lib/train-run"
-import type { AirSite, Basemap, BusResponse, Corridor, CycleDock, PlanningApp, RailResponse, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
+import type { AirSite, Basemap, BusResponse, BusVehicle, Corridor, CycleDock, PlanningApp, RailResponse, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
 
 // Turbopack rewrites MapLibre's own worker URL into a chunk the worker cannot run.
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
@@ -63,6 +65,9 @@ const OPENING = {
 }
 
 const LABEL_REFRESH_MS = 700
+// Buses move a few metres a second, so five redraws a second look smooth.
+const BUS_FRAME_MS = 200
+const BUS_LABEL_CAP = 60
 
 const FLYOVER = [
   { center: [-0.1246, 51.5007] as [number, number], zoom: 13.4, pitch: 60, bearing: -20, duration: 7000, curve: 1.25 },
@@ -190,10 +195,11 @@ type CityMapProps = {
   rail: RailSnapshots
   transit: TransitContext
   bus: BusResponse | null
+  buses: BusVehicle[] | null
   cycles: CycleDock[] | null
   planning: PlanningApp[] | null
   air: AirSite[] | null
-  onView: (view: { lng: number; lat: number; zoom: number }) => void
+  onView: (view: MapView) => void
   layers: WatchLayers
   basemap: Basemap
   flyToken: number
@@ -212,6 +218,7 @@ export function CityMap({
   rail,
   transit,
   bus,
+  buses,
   cycles,
   planning,
   air,
@@ -233,6 +240,7 @@ export function CityMap({
   const railRef = useRef<RailSnapshots>(rail)
   const runsRef = useRef<Runs>({ rail: [], light: [], river: [] })
   const transitRef = useRef(transit)
+  const busMotionRef = useRef<BusMotions>(noBusMotion())
   const onMapRef = useRef(onMap)
   const onViewRef = useRef(onView)
   const readyRef = useRef(false)
@@ -284,7 +292,8 @@ export function CityMap({
         const key = mapViewKey(centre.lng, centre.lat, zoom)
         if (viewKeyRef.current === key) return
         viewKeyRef.current = key
-        onViewRef.current({ lng: centre.lng, lat: centre.lat, zoom })
+        const box = map.getBounds()
+        onViewRef.current({ lng: centre.lng, lat: centre.lat, zoom, bounds: [box.getWest(), box.getSouth(), box.getEast(), box.getNorth()] })
       }, 800)
     }
     report()
@@ -307,6 +316,10 @@ export function CityMap({
     }
     runsRef.current = next
   }, [rail])
+
+  useEffect(() => {
+    busMotionRef.current = buses && layers.bus ? syncBusMotion(busMotionRef.current, buses, Date.now()) : noBusMotion()
+  }, [buses, layers.bus])
 
   useEffect(() => {
     basemapRef.current = basemap
@@ -387,8 +400,9 @@ export function CityMap({
     // and a GeoJSON push every frame aborts the tile reload before the dot moves.
     const ios = iosWebKit()
     const pushGap = ios ? 140 : 0
-    const gates: Record<"particles" | RailMode, PushGate> = {
+    const gates: Record<"particles" | "buses" | RailMode, PushGate> = {
       particles: { busy: false, at: 0 },
+      buses: { busy: false, at: 0 },
       rail: { busy: false, at: 0 },
       light: { busy: false, at: 0 },
       river: { busy: false, at: 0 },
@@ -401,6 +415,10 @@ export function CityMap({
       document.body.appendChild(keep)
     }
     const labelled: Record<RailMode, boolean> = { rail: false, light: false, river: false }
+    let busesAt = 0
+    let drewBuses = false
+    let busLabelsDrawn = false
+    let busLabelsAt = 0
     let labelsAt = 0
     const refreshTrainLabels = (current: Map, now: number) => {
       const show = current.getZoom() >= LABEL_MIN_ZOOM
@@ -454,6 +472,31 @@ export function CityMap({
         else trains.setData(moving)
       }
       refreshTrainLabels(current, now)
+      if (now - busesAt >= BUS_FRAME_MS) {
+        busesAt = now
+        const vehicles = geoJsonSource(current, "bus-vehicles")
+        const motions = busMotionRef.current
+        const showing = layerShown(current, "bus-vehicles") && current.getZoom() >= BUS_MIN_ZOOM && motions.size > 0
+        if (vehicles && showing) {
+          const moving = busMotionCollection(motions, Date.now())
+          if (ios) pushMovingSource(vehicles, gates.buses, moving, now, pushGap)
+          else vehicles.setData(moving)
+          drewBuses = true
+        } else if (vehicles && drewBuses) {
+          vehicles.setData(emptyCollection())
+          drewBuses = false
+        }
+        const labels = geoJsonSource(current, "bus-vehicle-labels")
+        const plated = showing && current.getZoom() >= LABEL_MIN_ZOOM
+        if (labels && plated && now - busLabelsAt >= LABEL_REFRESH_MS) {
+          busLabelsAt = now
+          labels.setData(busPlates(current, motions, copyRef.current))
+          busLabelsDrawn = true
+        } else if (labels && busLabelsDrawn && !plated) {
+          labels.setData(emptyCollection())
+          busLabelsDrawn = false
+        }
+      }
     }
     const tick = () => {
       step()
@@ -658,6 +701,27 @@ function withTrainMarks(map: Map, collection: GeoJSON.FeatureCollection, m: Mess
   return collection
 }
 
+// Route plates for the buses on screen, refreshed with the train plates.
+function busPlates(map: Map, motions: BusMotions, m: Messages): GeoJSON.FeatureCollection {
+  const bounds = map.getBounds()
+  const features: GeoJSON.Feature[] = []
+  const now = Date.now()
+  for (const motion of motions.values()) {
+    if (features.length >= BUS_LABEL_CAP) break
+    const position = busPosition(motion, now)
+    if (!bounds.contains(position)) continue
+    const { vehicle } = motion
+    const icon = placeStopPlate(map, vehicle.dest ? m.towards(vehicle.dest) : "", vehicle.route ? [vehicle.route] : [], "#DC241F")
+    if (!icon) continue
+    features.push({
+      type: "Feature",
+      properties: { id: vehicle.id, route: vehicle.route, dest: vehicle.dest, operator: vehicle.operator, at: vehicle.at, icon },
+      geometry: { type: "Point", coordinates: position },
+    })
+  }
+  return { type: "FeatureCollection", features }
+}
+
 function emptyCollection(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] }
 }
@@ -794,6 +858,8 @@ function bindOverlayClicks(
     "charge-points": (properties) => chargePopup(properties, copyRef.current),
     "bus-stops": (properties) => busStopPopup(properties, copyRef.current),
     "bus-stop-label": (properties) => busStopPopup(properties, copyRef.current),
+    "bus-vehicles": (properties) => busVehiclePopup(properties, copyRef.current),
+    "bus-vehicle-label": (properties) => busVehiclePopup(properties, copyRef.current),
     cycles: (properties) => cyclePopup(properties, copyRef.current),
     planning: (properties) => planningPopup(properties, copyRef.current),
     air: (properties) => airPopup(properties, copyRef.current),
