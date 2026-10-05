@@ -38,7 +38,7 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 | Santander Cycles | TfL `/BikePoint` |
 | Weather warnings | Met Office [Weather DataHub](https://datahub.metoffice.gov.uk) NSWWS warnings API, with warning areas (free key, `METOFFICE_NSWWS_KEY`); without a key, the [warnings RSS for London & South East](https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/se) |
 | Flood warnings and rainfall | Environment Agency [real-time flood-monitoring API](https://environment.data.gov.uk/flood-monitoring/doc/reference) |
-| Temperature | [Open-Meteo](https://open-meteo.com) |
+| Temperature | Met Office Weather DataHub Site-Specific "Global Spot" hourly forecast for central London (free key, `METOFFICE_SITE_KEY`); without a key, [Open-Meteo](https://open-meteo.com) |
 | Air quality | [London Air Quality Network](https://www.londonair.org.uk), Imperial College London |
 | Planning applications | GLA [Planning London Datahub](https://www.london.gov.uk/programmes-strategies/planning/digital-planning/planning-london-datahub) |
 | Congestion Charge and ULEZ zones | [London Datastore](https://data.london.gov.uk/dataset/london-wide-ultra-low-emission-zone-2023-vd455) |
@@ -71,7 +71,7 @@ Open [http://127.0.0.1:4317](http://127.0.0.1:4317). Put a free TfL key from [ap
 
 The site runs as a Cloudflare Worker (vinext). Every visitor reads one shared copy of each feed: trains about every fifteen seconds, road status and line status every minute, disruptions every two minutes, and the rest less often. Upstream services see the same traffic whether one person or a thousand have the map open.
 
-1. Set `TFL_APP_KEY`, `BODS_API_KEY` and `METOFFICE_NSWWS_KEY` as Worker secrets: `npx wrangler secret put TFL_APP_KEY`, and the same for the others.
+1. Set `TFL_APP_KEY`, `BODS_API_KEY`, `METOFFICE_NSWWS_KEY` and `METOFFICE_SITE_KEY` as Worker secrets: `npx wrangler secret put TFL_APP_KEY`, and the same for the others.
 2. Optional: create a KV namespace for the daily visit counter and set `SMARTLDN_VISITS_KV_ID` before building (see `cloudflare.config.ts`).
 3. Build and deploy with `npm run build:vinext`, then deploy through your usual Wrangler flow.
 
@@ -82,7 +82,6 @@ The Tube, Elizabeth line and Overground arrivals, and the London bus positions, 
 These need a registration, a server endpoint that receives pushed data, or both, and are planned for a later phase:
 
 - Every borough street-works permit from DfT [Street Manager](https://department-for-transport-streetmanager.github.io/street-manager-docs/open-data/) open data (registration and a webhook).
-- Met Office DataHub Land Observations in place of Open-Meteo for temperature (free key, a separate subscription from the warnings key).
 
 ## License and credit
 

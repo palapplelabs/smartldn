@@ -1,7 +1,7 @@
 import { fetchText } from "@/lib/fetch-text"
 import { errorText, snapshotGet } from "@/lib/snapshot-route"
 import { fetchUpstream } from "@/lib/upstream"
-import { EMPTY_CONDITIONS, heaviestRain, nswwsSnapshotUrl, parseFloods, parseMetOfficeRss, parseNswws, parseTemperature, rainStations } from "@/lib/warnings"
+import { EMPTY_CONDITIONS, heaviestRain, nswwsSnapshotUrl, parseFloods, parseMetOfficeRss, parseNswws, parseSiteTemperature, parseTemperature, rainStations } from "@/lib/warnings"
 import type { WarningsResponse } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -14,6 +14,8 @@ const EA = "https://environment.data.gov.uk/flood-monitoring"
 const FLOODS_URL = `${EA}/id/floods?lat=51.5074&long=-0.1278&dist=25`
 const RAIN_STATIONS_URL = `${EA}/id/stations?parameter=rainfall&lat=51.5074&long=-0.1278&dist=25`
 const RAIN_LATEST_URL = `${EA}/data/readings?parameter=rainfall&latest`
+const SITE_URL =
+  "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=51.5074&longitude=-0.1278&excludeParameterMetadata=true"
 const TEMPERATURE_URL =
   "https://api.open-meteo.com/v1/forecast?latitude=51.5074&longitude=-0.1278&current=temperature_2m&timezone=Europe%2FLondon"
 
@@ -25,7 +27,7 @@ export const GET = snapshotGet<WarningsResponse>({
       readJson(FLOODS_URL, 5 * 60_000).then(parseFloods),
       readJson(RAIN_STATIONS_URL, 24 * 60 * 60_000).then(rainStations),
       readJson(RAIN_LATEST_URL, 10 * 60_000),
-      readJson(TEMPERATURE_URL, 10 * 60_000).then(parseTemperature),
+      readTemperature(now),
     ])
     const official = settled(warnings, { warnings: [], areas: EMPTY_AREAS })
     const listed = [...official.warnings, ...settled(floods, [])].sort((a, b) => b.score - a.score)
@@ -57,6 +59,28 @@ async function metOfficeWarnings(): Promise<{ warnings: WarningsResponse["warnin
   const issued = await fetchUpstream(snapshot, 30 * 60_000, { timeoutMs: 15_000, headers })
   if (issued.status !== 200) throw new Error(`HTTP ${issued.status} from Met Office warnings`)
   return parseNswws(JSON.parse(new TextDecoder().decode(issued.body)))
+}
+
+// The free Global Spot plan allows 360 calls a day; one call per 10 minutes is 144.
+// Without the key, or if the Met Office fails, Open-Meteo answers instead.
+async function readTemperature(now: number): Promise<number | null> {
+  const key = process.env.METOFFICE_SITE_KEY
+  if (key) {
+    try {
+      const result = await fetchUpstream(SITE_URL, 10 * 60_000, {
+        timeoutMs: 15_000,
+        headers: { apikey: key, Accept: "application/json" },
+        cacheKey: "https://smartldn-cache.invalid/metoffice/site/london",
+      })
+      if (result.status === 200) {
+        const value = parseSiteTemperature(JSON.parse(new TextDecoder().decode(result.body)), now)
+        if (value != null) return value
+      }
+    } catch {
+      // Fall through to Open-Meteo.
+    }
+  }
+  return parseTemperature(await readJson(TEMPERATURE_URL, 10 * 60_000))
 }
 
 async function readJson(url: string, ttlMs: number): Promise<unknown> {

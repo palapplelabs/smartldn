@@ -7,7 +7,7 @@ import { parseLifts, parseLineStatus, toneOf } from "./line-status.ts"
 import { readArrivals } from "./rail-arrivals.ts"
 import { bandOf, corridorsFromStatus, summarize } from "./road-status.ts"
 import type { Corridor } from "./types.ts"
-import { heaviestRain, nswwsSnapshotUrl, parseFloods, parseMetOfficeRss, parseNswws, parseTemperature, rainStations, weatherBar } from "./warnings.ts"
+import { heaviestRain, nswwsSnapshotUrl, parseFloods, parseMetOfficeRss, parseNswws, parseSiteTemperature, parseTemperature, rainStations, weatherBar } from "./warnings.ts"
 
 const now = Date.parse("2026-10-05T10:05:00Z")
 
@@ -182,6 +182,14 @@ assert.equal(
 assert.equal(heaviestRain({ items: [] }, gauges, now), null)
 assert.equal(parseTemperature({ current: { temperature_2m: 14.2 } }), 14.2)
 assert.equal(parseTemperature({ reason: "overloaded" }), null)
+const site = { type: "FeatureCollection", features: [{ type: "Feature", properties: { location: { name: "London" }, timeSeries: [
+  { time: "2026-10-05T09:00Z", screenTemperature: 15.1 },
+  { time: "2026-10-05T10:00Z", screenTemperature: 16.23 },
+  { time: "2026-10-05T11:00Z", screenTemperature: 17.4 },
+] } }] }
+assert.equal(parseSiteTemperature(site, now), 16.23)
+assert.equal(parseSiteTemperature(site, Date.parse("2026-10-05T08:00Z")), null)
+assert.equal(parseSiteTemperature({ features: [] }, now), null)
 assert.deepEqual(weatherBar([], { temperatureC: 14.2, rainfallMm: 0, rainfallPlace: "" }), { label: "14°C · Dry", tone: "green" })
 assert.equal(weatherBar(metOffice, null)?.label, "Yellow rain · Amber wind")
 

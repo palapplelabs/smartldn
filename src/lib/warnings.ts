@@ -183,6 +183,23 @@ export function rainStations(payload: unknown): Set<string> {
   return out
 }
 
+// Met Office Site-Specific (Global Spot) hourly forecast for a point: the entry
+// for the current hour. It is the Met Office's own figure for central London.
+export function parseSiteTemperature(payload: unknown, now: number): number | null {
+  const features = typeof payload === "object" && payload !== null && "features" in payload && Array.isArray(payload.features) ? payload.features : []
+  const first = features[0] as { properties?: { timeSeries?: unknown } } | undefined
+  const series = Array.isArray(first?.properties?.timeSeries) ? (first.properties.timeSeries as unknown[]) : []
+  let current: number | null = null
+  for (const raw of series) {
+    if (typeof raw !== "object" || raw === null) continue
+    const row = raw as { time?: unknown; screenTemperature?: unknown }
+    const at = typeof row.time === "string" ? Date.parse(row.time) : NaN
+    if (!Number.isFinite(at) || at > now) continue
+    if (typeof row.screenTemperature === "number" && Number.isFinite(row.screenTemperature)) current = row.screenTemperature
+  }
+  return current
+}
+
 export function parseTemperature(payload: unknown): number | null {
   if (typeof payload !== "object" || payload === null || !("current" in payload)) return null
   const current = payload.current
