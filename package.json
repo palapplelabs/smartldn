@@ -1,5 +1,5 @@
 {
-  "name": "hk-traffic-dashboard",
+  "name": "smartldn",
   "version": "0.1.0",
   "private": false,
   "license": "MIT",
@@ -24,8 +24,6 @@
     "lucide-react": "^1.48.0",
     "maplibre-gl": "^6.11.2",
     "next": "16.3.6",
-    "opencc-js": "^1.4.2",
-    "pngjs": "^7.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-server-dom-webpack": "^19.3.0",
@@ -37,7 +35,6 @@
     "@cloudflare/vite-plugin": "^2.0.0-beta.sha-ad79608dd",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/pngjs": "^6.0.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
@@ -45,6 +42,7 @@
     "cf": "^1.0.0-beta.5",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "proj4": "^2.22.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^8.3.0"

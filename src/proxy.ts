@@ -7,11 +7,11 @@ const DAY_SECONDS = 60 * 60 * 36
 export function proxy(request: NextRequest) {
   if (request.headers.get("sec-fetch-dest") !== "document") return NextResponse.next()
   const day = visitDay(new Date())
-  const fresh = isNewVisit(request.cookies.get("hk-visit")?.value, day)
+  const fresh = isNewVisit(request.cookies.get("smartldn-visit")?.value, day)
   recordPageView(fresh ? "new" : "return")
   const response = NextResponse.next()
   if (!fresh) return response
-  response.cookies.set("hk-visit", day, {
+  response.cookies.set("smartldn-visit", day, {
     httpOnly: true,
     maxAge: DAY_SECONDS,
     path: "/",

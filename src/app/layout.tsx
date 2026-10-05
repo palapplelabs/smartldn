@@ -1,7 +1,5 @@
 import type { Metadata } from "next"
-import { cookies } from "next/headers"
 import { IBM_Plex_Mono, Newsreader, Outfit } from "next/font/google"
-import { htmlLang, localeOf } from "@/lib/i18n"
 import "./globals.css"
 
 const outfit = Outfit({
@@ -21,16 +19,14 @@ const hud = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "香港智慧城市交通情報網 by Keith Li",
+  title: "SmartLDN · London live city map",
   description:
-    "Live strategic-road speeds, harbour crossings, land control points, and weather warnings over Hong Kong.",
+    "Live London on one map: TfL road status, Thames crossings, Tube, rail, DLR, tram, bus and river arrivals, road works, cameras, cycles, weather, air quality and planning.",
 }
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const store = await cookies()
-  const locale = localeOf(store.get("locale")?.value)
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang={htmlLang(locale)} data-locale={locale} className={`${outfit.variable} ${newsreader.variable} ${hud.variable} dark h-full antialiased`}>
+    <html lang="en-GB" className={`${outfit.variable} ${newsreader.variable} ${hud.variable} dark h-full antialiased`}>
       <body className={`${outfit.className} min-h-full`}>{children}</body>
     </html>
   )

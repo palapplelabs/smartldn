@@ -1,20 +1,19 @@
-import { isStopOperator, loadStopBoard } from "@/lib/stop-board"
+import { loadBusBoard } from "@/lib/bus-feed"
+import { errorText } from "@/lib/snapshot-route"
 
 export const dynamic = "force-dynamic"
 
+// TfL stop codes are NaPTAN ATCO codes: digits and capital letters.
+const STOP_ID = /^[0-9A-Z]{6,16}$/
+
 export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const op = url.searchParams.get("op")
-  const id = url.searchParams.get("id")?.trim() ?? ""
-  if (!isStopOperator(op) || !id) {
-    return Response.json({ ok: false, error: "Stop missing" }, { status: 400 })
-  }
+  const id = new URL(request.url).searchParams.get("id")?.trim() ?? ""
+  if (!STOP_ID.test(id)) return Response.json({ ok: false, error: "Stop missing" }, { status: 400 })
   try {
-    const board = await loadStopBoard(op, id)
+    const board = await loadBusBoard(id)
     if (!board.ok) return Response.json({ ok: false, error: "Stop board failed" }, { status: 502 })
     return Response.json({ ok: true, stop: board.stop })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Stop board failed"
-    return Response.json({ ok: false, error: message }, { status: 502 })
+    return Response.json({ ok: false, error: errorText(error, "Stop board failed") }, { status: 502 })
   }
 }

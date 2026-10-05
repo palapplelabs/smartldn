@@ -9,24 +9,15 @@ import type { Basemap, WatchLayer, WatchLayers } from "@/lib/types"
 type LayerDockProps = {
   layers: WatchLayers
   basemap: Basemap
-  counts: Record<WatchLayer, number | null>
+  counts: Partial<Record<WatchLayer, number | null>>
   onSetLayers: (layers: WatchLayers) => void
   onBasemap: (basemap: Basemap) => void
   onReplay: () => void
   mapLive: boolean
-  pictureError: string | null
-  mtrError: string | null
-  kmbError: string | null
-  lrtError: string | null
-  citybusError: string | null
-  gmbError: string | null
-  nlbError: string | null
-  ferryError: string | null
-  parkingError: string | null
   aboveMarquee: boolean
 }
 
-const SPEED_KEY = [
+const ROAD_KEY = [
   { color: "#3DDC97", key: "good" },
   { color: "#FFC857", key: "average" },
   { color: "#FF5D73", key: "bad" },
@@ -34,34 +25,30 @@ const SPEED_KEY = [
 
 function layerLabel(id: WatchLayer, m: Messages): string {
   switch (id) {
-    case "speed":
-      return m.speedLayer
+    case "roads":
+      return m.roadsLayer
     case "cameras":
       return m.cameras
     case "works":
       return m.worksLayer
-    case "tolls":
-      return m.tolls
     case "incidents":
       return m.incidentsLayer
-    case "control":
-      return m.boundary
-    case "mtr":
-      return m.mtr
-    case "kmb":
-      return m.kmbLwb
-    case "lrt":
-      return m.lrt
-    case "citybus":
-      return m.citybus
-    case "gmb":
-      return m.gmb
-    case "nlb":
-      return m.nlb
-    case "ferry":
-      return m.ferry
-    case "parking":
-      return m.parking
+    case "charges":
+      return m.charges
+    case "rail":
+      return m.rail
+    case "light":
+      return m.light
+    case "bus":
+      return m.bus
+    case "river":
+      return m.river
+    case "cycles":
+      return m.cycles
+    case "planning":
+      return m.planning
+    case "air":
+      return m.air
     default: {
       const exhaustive: never = id
       return exhaustive
@@ -87,20 +74,18 @@ function basemapLabel(id: Basemap, m: Messages): string {
 const BASEMAPS: Basemap[] = ["satellite", "street", "buildings"]
 const COUNTED_LAYERS: ReadonlySet<WatchLayer> = new Set(["works", "incidents"])
 const LAYERS: { id: WatchLayer; swatch: string }[] = [
-  { id: "speed", swatch: "bg-[#3DDC97]" },
+  { id: "roads", swatch: "bg-[#3DDC97]" },
   { id: "cameras", swatch: "bg-[#7DD3E8]" },
-  { id: "works", swatch: "bg-[#FF5D73]" },
-  { id: "tolls", swatch: "bg-[#E7FBFF]" },
+  { id: "works", swatch: "bg-[#FFC857]" },
   { id: "incidents", swatch: "bg-[#FF5D73]" },
-  { id: "control", swatch: "bg-[#D7B4FF]" },
-  { id: "mtr", swatch: "bg-[#E2231A]" },
-  { id: "lrt", swatch: "bg-[#f5c518]" },
-  { id: "kmb", swatch: "bg-[#9f1239]" },
-  { id: "citybus", swatch: "bg-[#f6c343]" },
-  { id: "gmb", swatch: "bg-[#65a30d]" },
-  { id: "nlb", swatch: "bg-[#0f766e]" },
-  { id: "ferry", swatch: "bg-[#0369a1]" },
-  { id: "parking", swatch: "bg-[#d97706]" },
+  { id: "charges", swatch: "bg-[#D7B4FF]" },
+  { id: "rail", swatch: "bg-[#E32017]" },
+  { id: "light", swatch: "bg-[#00A4A7]" },
+  { id: "bus", swatch: "bg-[#DC241F]" },
+  { id: "river", swatch: "bg-[#38BDF8]" },
+  { id: "cycles", swatch: "bg-[#5EEAD4]" },
+  { id: "planning", swatch: "bg-[#F97316]" },
+  { id: "air", swatch: "bg-[#C026D3]" },
 ]
 
 export function LayerDock(props: LayerDockProps) {
@@ -169,7 +154,7 @@ export function LayerDock(props: LayerDockProps) {
       </button>
       {LAYERS.map((layer) => {
         const on = props.layers[layer.id]
-        const count = COUNTED_LAYERS.has(layer.id) ? props.counts[layer.id] : null
+        const count = COUNTED_LAYERS.has(layer.id) ? props.counts[layer.id] ?? null : null
         return (
           <button
             key={layer.id}
@@ -196,62 +181,18 @@ export function LayerDock(props: LayerDockProps) {
         {m.replay}
       </button>
       </div>
-      {props.layers.speed ? (
+      {props.layers.roads ? (
         <p
           className="basis-full flex flex-wrap items-center gap-x-3 gap-y-1 font-[family-name:var(--font-hud)] text-[0.68rem] tracking-[0.06em] text-cyan-50/90 uppercase"
-          aria-label={m.speedKey}
+          aria-label={m.roadsKey}
+          title={m.roadsKey}
         >
-          {SPEED_KEY.map((band) => (
+          {ROAD_KEY.map((band) => (
             <span key={band.key} className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-4 rounded-full" style={{ background: band.color }} />
               {m[band.key]}
             </span>
           ))}
-        </p>
-      ) : null}
-      {props.pictureError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.pictureError : m.pictureFailed}
-        </p>
-      ) : null}
-      {props.mtrError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.mtrError : m.mtrFailed}
-        </p>
-      ) : null}
-      {props.lrtError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.lrtError : m.lrtFailed}
-        </p>
-      ) : null}
-      {props.citybusError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.citybusError : m.citybusStopsFailed}
-        </p>
-      ) : null}
-      {props.gmbError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.gmbError : m.gmbStopsFailed}
-        </p>
-      ) : null}
-      {props.nlbError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.nlbError : m.nlbStopsFailed}
-        </p>
-      ) : null}
-      {props.ferryError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.ferryError : m.ferryFailed}
-        </p>
-      ) : null}
-      {props.parkingError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.parkingError : m.parkingFailed}
-        </p>
-      ) : null}
-      {props.kmbError ? (
-        <p className="basis-full text-xs text-red-100" role="alert">
-          {m.locale === "en" ? props.kmbError : m.kmbStopsFailed}
         </p>
       ) : null}
     </div>

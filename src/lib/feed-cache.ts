@@ -3,7 +3,7 @@ export async function openFeedCache(): Promise<Cache | null> {
   if (!storage) return null
   if (storage.default) return storage.default
   try {
-    return await storage.open("hktraffic-feeds")
+    return await storage.open("smartldn-feeds")
   } catch {
     return null
   }

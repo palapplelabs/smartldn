@@ -5,37 +5,44 @@ type UpstreamBody = { status: number; body: ArrayBuffer; contentType: string }
 type UpstreamOptions = {
   headers?: HeadersInit
   timeoutMs?: number
+  method?: "GET" | "POST"
+  body?: string
+  // A POST search is shared by its query, not its address. Must be a URL.
+  cacheKey?: string
 }
 
 const memory = new Map<string, { expires: number; body: UpstreamBody }>()
 const pending = new Map<string, Promise<UpstreamBody>>()
 
 export async function fetchUpstream(url: string, ttlMs: number, options: UpstreamOptions = {}): Promise<UpstreamBody> {
-  const fresh = memory.get(url)
+  const key = options.cacheKey ?? url
+  const fresh = memory.get(key)
   if (fresh && fresh.expires > Date.now()) return fresh.body
-  const current = pending.get(url)
+  const current = pending.get(key)
   if (current) return current
-  const task = readThrough(url, ttlMs, options).finally(() => pending.delete(url))
-  pending.set(url, task)
+  const task = readThrough(url, key, ttlMs, options).finally(() => pending.delete(key))
+  pending.set(key, task)
   return task
 }
 
-async function readThrough(url: string, ttlMs: number, options: UpstreamOptions): Promise<UpstreamBody> {
-  const shared = await readShared(url, ttlMs)
+async function readThrough(url: string, key: string, ttlMs: number, options: UpstreamOptions): Promise<UpstreamBody> {
+  const shared = await readShared(key, ttlMs)
   if (shared) return shared
 
   // each other, and the request never produces a response.
   const response = await rawFetch()(url, {
     signal: AbortSignal.timeout(options.timeoutMs ?? 25_000),
     headers: options.headers,
+    method: options.method ?? "GET",
+    body: options.body,
   })
 
   const contentType = response.headers.get("content-type") ?? ""
   const bytes = await response.arrayBuffer()
   const body: UpstreamBody = { status: response.status, body: bytes, contentType }
   if (response.ok) {
-    memory.set(url, { expires: Date.now() + ttlMs, body })
-    await writeShared(url, ttlMs, body)
+    memory.set(key, { expires: Date.now() + ttlMs, body })
+    await writeShared(key, ttlMs, body)
   }
   return body
 }

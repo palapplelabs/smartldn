@@ -1,109 +1,61 @@
+// TfL publishes a status for each road corridor, not a speed. The band keeps the
+// three map colours: Good is free, Serious is slow, Severe or Closure is congested.
 export type SpeedBand = "free" | "slow" | "congested" | "unknown"
 
 export type Corridor = {
   id: string
-  roadTc: string
-  roadEn: string
-  direction: string
-  speedKmh: number | null
+  name: string
+  status: string
+  detail: string
   band: SpeedBand
-  lengthKm: number
-  detectorCount: number
-  coordinates: [number, number][]
+  closed: boolean
+  paths: [number, number][][]
 }
 
-export type SpeedSummary = {
-  corridorCount: number
-  detectorCount: number
-  meanSpeedKmh: number | null
+export type CorridorSummary = {
   free: number
   slow: number
   congested: number
   unknown: number
 }
 
-export type SegmentSummary = {
-  ok: boolean
-  error?: string
-  observedAt: string | null
-  validCount: number
-  invalidCount: number
-  meanSpeedKmh: number | null
-}
-
-export type NetworkStatus = {
-  ok: boolean
-  error?: string
-  revisionDate: string | null
-  usedOnMap: boolean
-  reason: string
-}
-
-export type TrafficResponse = {
+export type RoadsResponse = {
   ok: boolean
   error?: string
   observedAt: string | null
   corridors: Corridor[]
-  summary: SpeedSummary
-  segments: SegmentSummary
-  network: NetworkStatus
+  summary: CorridorSummary
 }
 
-export type HarbourJourney = {
-  from: string
-  to: string
-  minutes: number | null
-  colour: "red" | "amber" | "green" | "none"
-  note: string | null
-}
-
-export type ApproachLeg = {
-  code: string
-  name: string
-  minutes: number | null
-  colour: HarbourJourney["colour"]
-}
-
-export type ApproachPoint = {
-  id: string
-  name: string
-  nameTc: string
-  coordinates: [number, number]
-  legs: ApproachLeg[]
-}
-
-export type ApproachesResponse = {
-  ok: boolean
-  error?: string
-  capturedAt: string | null
-  points: ApproachPoint[]
-}
-
-export type PictureResponse = {
-  ok: boolean
-  error?: string
-  cameras: GeoJSON.FeatureCollection
-  works: GeoJSON.FeatureCollection
-  tolls: GeoJSON.FeatureCollection
-}
-
-export type IncidentsResponse = {
+export type DisruptionsResponse = {
   ok: boolean
   error?: string
   observedAt: string | null
+  works: GeoJSON.FeatureCollection
   incidents: GeoJSON.FeatureCollection
 }
 
-export type ControlPointsResponse = {
+export type CamerasResponse = {
   ok: boolean
   error?: string
-  observedAt: string | null
-  points: GeoJSON.FeatureCollection
+  cameras: GeoJSON.FeatureCollection
+}
+
+export type CrossingTone = "red" | "amber" | "green" | "none"
+
+export type ThamesCrossing = {
+  id: string
+  name: string
+  short: string
+  status: string
+  detail: string
+  tone: CrossingTone
+  coordinates: [number, number]
 }
 
 export type WeatherWarning = {
   id: string
-  code: string
+  kind: "weather" | "flood"
   name: string
   shortName: string
   detail: string
@@ -126,9 +78,9 @@ export type WarningsResponse = {
   conditions: WeatherConditions
 }
 
-export type MtrTimeType = "A" | "D"
+export type TimeType = "A" | "D"
 
-export type MtrTrain = {
+export type RailTrain = {
   id: string
   line: string
   dest: string
@@ -136,198 +88,165 @@ export type MtrTrain = {
   ttnt: number
   observedAt: string
   delay: boolean
-  timeType: MtrTimeType
+  timeType: TimeType
   anchor: string
   path: string[]
   hold: string[]
 }
 
-export type MtrCalling = {
+export type RailCalling = {
   dest: string
+  destName: string
   plat: string
   ttnt: number
   delay: boolean
-  timeType: MtrTimeType
+  timeType: TimeType
 }
 
-export type MtrBoard = {
+export type RailBoard = {
   line: string
   station: string
   message: string
-  trains: MtrCalling[]
+  trains: RailCalling[]
 }
 
-export type MtrResponse = {
+export type RailResponse = {
   ok: boolean
   error?: string
   observedAt: string | null
-  trains: MtrTrain[]
-  boards: MtrBoard[]
+  trains: RailTrain[]
+  boards: RailBoard[]
 }
 
-export type KmbCall = {
-  route: string
-  destTc: string
-  destEn: string
-  eta: string
-  minutes: number | null
-  scheduled: boolean
-  remarkTc: string
-  remarkEn: string
-  company: "KMB" | "LWB"
+export type LineTone = "red" | "amber" | "green"
+
+export type LineStatus = {
+  id: string
+  name: string
+  mode: string
+  color: string
+  severity: number
+  status: string
+  reason: string
+  tone: LineTone
+}
+
+export type LiftOutage = {
+  station: string
+  message: string
+}
+
+export type StatusResponse = {
+  ok: boolean
+  error?: string
+  observedAt: string | null
+  lines: LineStatus[]
+  lifts: LiftOutage[]
 }
 
 export type ArrivalClock = "ready" | "waiting"
 
-export type KmbStopBoard = {
-  id: string
-  nameTc: string
-  nameEn: string
-  lng: number
-  lat: number
-  routes: string[]
-  calls: KmbCall[]
-  clock: ArrivalClock
-}
-
-export type KmbPlacesResponse = {
-  ok: boolean
-  error?: string
-  stops: Omit<KmbStopBoard, "calls" | "clock">[]
-}
-
-export type KmbResponse = {
-  ok: boolean
-  error?: string
-  observedAt: string | null
-  stops: KmbStopBoard[]
-  cacheable?: boolean
-}
-
-export type LrtCalling = {
+export type BusCall = {
   route: string
   dest: string
-  destTc: string
-  destEn: string
-  ttnt: number
-  timeType: "A" | "D"
-  plat: string
-}
-
-export type LrtBoard = {
-  station: string
-  calls: LrtCalling[]
-}
-
-export type LrtResponse = {
-  ok: boolean
-  error?: string
-  observedAt: string | null
-  trains: MtrTrain[]
-  boards: LrtBoard[]
-}
-
-export type CitybusCall = {
-  route: string
-  destTc: string
-  destEn: string
   eta: string
   minutes: number | null
-  scheduled: boolean
-  remarkTc: string
-  remarkEn: string
+  vehicle: string
 }
 
-export type CitybusStopBoard = {
+export type BusStopBoard = {
   id: string
-  nameTc: string
-  nameEn: string
+  name: string
+  indicator: string
   lng: number
   lat: number
   routes: string[]
-  calls: CitybusCall[]
+  calls: BusCall[]
   clock: ArrivalClock
 }
 
-export type CitybusPlacesResponse = {
+export type BusPlacesResponse = {
   ok: boolean
   error?: string
-  stops: Omit<CitybusStopBoard, "calls" | "clock">[]
+  stops: Omit<BusStopBoard, "calls" | "clock">[]
 }
 
-export type CitybusResponse = {
-  ok: boolean
-  error?: string
-  observedAt: string | null
-  stops: CitybusStopBoard[]
-  cacheable?: boolean
-}
-
-export type GmbCall = CitybusCall
-export type GmbStopBoard = CitybusStopBoard
-export type GmbPlacesResponse = CitybusPlacesResponse
-export type GmbResponse = CitybusResponse
-
-export type NlbCall = CitybusCall
-export type NlbStopBoard = CitybusStopBoard
-export type NlbPlacesResponse = CitybusPlacesResponse
-export type NlbResponse = CitybusResponse
-
-export type FerryCall = {
-  route: string
-  destTc: string
-  destEn: string
-  originTc: string
-  originEn: string
-  arriving: boolean
-  eta: string
-  minutes: number | null
-  remarkTc: string
-  remarkEn: string
-  scheduled?: boolean
-}
-
-export type FerryPier = {
-  id: string
-  nameTc: string
-  nameEn: string
-  lng: number
-  lat: number
-  calls: FerryCall[]
-}
-
-export type FerryVessel = {
-  id: string
-  nameTc: string
-  nameEn: string
-  lng: number
-  lat: number
-  route: string
-  eta: string
-  minutes: number | null
-  destTc?: string
-  destEn?: string
-  fix: "gps" | "clock"
-  fromLng?: number
-  fromLat?: number
-  toLng?: number
-  toLat?: number
-  departAt?: number | null
-  arriveAt?: number | null
-  pathLng?: number[]
-  pathLat?: number[]
-}
-
-export type FerryResponse = {
+export type BusResponse = {
   ok: boolean
   error?: string
   observedAt: string | null
-  piers: FerryPier[]
-  vessels: FerryVessel[]
-  cacheable?: boolean
+  stops: BusStopBoard[]
 }
 
-export type WatchLayer = "speed" | "cameras" | "works" | "tolls" | "incidents" | "control" | "mtr" | "kmb" | "lrt" | "citybus" | "gmb" | "nlb" | "ferry" | "parking"
+export type CycleDock = {
+  id: string
+  name: string
+  lng: number
+  lat: number
+  bikes: number
+  ebikes: number
+  empty: number
+  docks: number
+}
+
+export type CyclesResponse = {
+  ok: boolean
+  error?: string
+  observedAt: string | null
+  docks: CycleDock[]
+}
+
+export type AirSite = {
+  code: string
+  name: string
+  lng: number
+  lat: number
+  index: number | null
+  band: string
+  species: string
+}
+
+export type AirResponse = {
+  ok: boolean
+  error?: string
+  observedAt: string | null
+  sites: AirSite[]
+}
+
+export type PlanningStage = "building" | "pending" | "decided"
+
+export type PlanningApp = {
+  id: string
+  authority: string
+  status: string
+  stage: PlanningStage
+  description: string
+  site: string
+  validDate: string
+  commencedDate: string
+  lng: number
+  lat: number
+}
+
+export type PlanningResponse = {
+  ok: boolean
+  error?: string
+  apps: PlanningApp[]
+}
+
+export type WatchLayer =
+  | "roads"
+  | "cameras"
+  | "works"
+  | "incidents"
+  | "charges"
+  | "rail"
+  | "light"
+  | "bus"
+  | "river"
+  | "cycles"
+  | "planning"
+  | "air"
 
 export type WatchLayers = Record<WatchLayer, boolean>
 

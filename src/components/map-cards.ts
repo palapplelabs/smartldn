@@ -1,545 +1,120 @@
-import { facingWord, parsePlace, type CameraPlace } from "@/lib/camera-place"
-import {
-  bandWord,
-  controlName,
-  displayText,
-  districtName,
-  queueText,
-  regionName,
-  vehicleSentence,
-  type Locale,
-  type Messages,
-} from "@/lib/i18n"
-import type { TrainSpot } from "@/lib/mtr-estimate"
-import { lineRecord, linesThrough, projectNetworkTrain, stationRecord } from "@/lib/mtr-network"
-import { lrtRoutesThrough, lrtStation } from "@/lib/lrt-network"
-import { isCameraSnapshotUrl } from "@/lib/picture"
+import { bandWord, formatStamp, type Messages } from "@/lib/i18n"
+import type { TrainSpot } from "@/lib/train-estimate"
+import { lineRecord, linesThrough, projectNetworkTrain, stationRecord, type RailMode } from "@/lib/rail-network"
+import { isJamCamUrl } from "@/lib/jamcams"
 import { isSpeedBand } from "@/lib/speed"
-import { ferryBadge, ferryLeg } from "@/lib/ferry-routes"
-import { boardFailedCopy, clearBoardFault, markBoardFault } from "@/lib/board-status"
+import { clearBoardFault, markBoardFault } from "@/lib/board-status"
 import { routesWithoutArrival } from "@/lib/stop-routes"
-import type { StopOperator } from "@/lib/stop-board"
-import type { ParkingKind, ParkingSpace } from "@/lib/parking-parks"
-import type { ApproachPoint, HarbourJourney, LrtResponse, MtrCalling, MtrResponse, SpeedBand } from "@/lib/types"
+import type { BusCall, LineStatus, LiftOutage, RailCalling, RailResponse, SpeedBand } from "@/lib/types"
 
-const TUNNEL_TC: Record<string, string> = {
-  "Western Harbour Crossing": "西區海底隧道",
-  "Eastern Harbour Crossing": "東區海底隧道",
-  "Cross Harbour Tunnel": "紅磡海底隧道",
-  "Tai Lam Tunnel": "大欖隧道",
-}
-
-const BOUND_TC: Record<string, string> = {
-  eastbound: "東行",
-  westbound: "西行",
-  northbound: "北行",
-  southbound: "南行",
-}
-
-const BOUND_EN: Record<string, string> = {
-  東行: "Eastbound",
-  西行: "Westbound",
-  北行: "Northbound",
-  南行: "Southbound",
-}
-
-const SHORT_BOUND: Record<string, string> = {
-  east: "eastbound",
-  west: "westbound",
-  north: "northbound",
-  south: "southbound",
-}
-
-export function approachPopup(point: ApproachPoint, m: Messages): HTMLElement {
-  const place = parsePlace(displayText(m.locale, point.nameTc, point.name))
-  const card = openCard(place.road || displayText(m.locale, point.nameTc, point.name))
-  const detail = placeLine(place, m)
-  if (detail) card.head.append(paragraph("city-card-detail", detail))
-  for (const leg of point.legs) {
-    const name = crossingLegName(leg.code, leg.name, m)
-    const value = leg.minutes == null ? m.noReading : m.minutes(leg.minutes)
-    card.body.append(fact(name, value, minuteTone(leg.colour)))
-  }
-  return card.root
-}
+export type TransitContext = { lines: LineStatus[]; lifts: LiftOutage[] }
 
 export function corridorPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
   const card = openCard(textProp(properties, "name") || m.roads)
-  const direction = presentBound(textProp(properties, "direction"), m.locale)
-  if (direction) card.head.append(paragraph("city-card-detail", direction))
-  const speed = textProp(properties, "speed")
   const band = textProp(properties, "band")
-  if (speed) card.body.append(fact(m.speedLayer, speed))
-  if (isSpeedBand(band) && band !== "unknown") card.body.append(fact(m.classLabel, bandWord(band, m), bandTone(band)))
+  const status = textProp(properties, "status")
+  if (isSpeedBand(band) && band !== "unknown") {
+    card.body.append(fact(m.statusLabel, properties?.closed === true ? m.closed : bandWord(band, m), bandTone(band)))
+  } else if (status) {
+    card.body.append(fact(m.statusLabel, status))
+  }
+  const detail = textProp(properties, "detail")
+  if (detail) card.body.append(paragraph("city-card-copy", detail))
+  card.root.append(paragraph("city-card-aside", m.roadsKey))
   return card.root
 }
 
 export function cameraPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  const description = displayText(m.locale, textProp(properties, "nameTc"), textProp(properties, "name"))
-  const place = parsePlace(description)
-  const card = openCard(place.road || description || m.cameras)
-  const detail = placeLine(place, m)
-  if (detail) card.head.append(paragraph("city-card-detail", detail))
-  const district = localName(textProp(properties, "districtTc"), textProp(properties, "district"), districtName, m)
-  const region = localName(textProp(properties, "regionTc"), textProp(properties, "region"), regionName, m)
-  if (district) card.body.append(fact(m.districtLabel, district))
-  if (region) card.body.append(fact(m.regionLabel, region))
-  const rotation = numberProp(properties, "rotation")
-  if (rotation != null) card.body.append(fact(m.facingLabel, m.facing(facingWord(rotation, m.locale))))
-  if (place.reference) card.body.append(fact(m.referenceLabel, place.reference))
-  const url = textProp(properties, "url")
-  if (!isCameraSnapshotUrl(url)) return card.root
+  const name = textProp(properties, "name")
+  const card = openCard(name || m.cameras)
+  const view = textProp(properties, "view")
+  if (view) card.body.append(fact(m.facingLabel, view))
+  const image = textProp(properties, "image")
+  if (!isJamCamUrl(image)) return card.root
   const figure = document.createElement("figure")
   figure.className = "city-card-figure"
-  const image = document.createElement("img")
-  image.alt = [place.road, detail].filter(Boolean).join(m.locale === "en" ? ", " : "，")
-  image.addEventListener("error", () => {
+  const still = document.createElement("img")
+  still.alt = name
+  still.addEventListener("error", () => {
     figure.remove()
     card.root.append(paragraph("city-card-note", m.snapshotFailed))
   })
-  image.src = `/api/camera?url=${encodeURIComponent(url)}`
-  figure.append(image)
+  // TfL replaces the still every few minutes under the same name.
+  still.src = `${image}?t=${Math.floor(Date.now() / 120_000)}`
+  figure.append(still)
   card.root.append(figure)
-  return card.root
-}
-
-export function controlPointPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  const title = controlName(m.locale, textProp(properties, "code"), textProp(properties, "name") || m.controlPoint)
-  const card = openCard(title)
-  card.head.append(paragraph("city-card-detail", m.passengerClearance))
-  const rows = [
-    [m.residentArrival, "residentArrCode", false],
-    [m.residentDeparture, "residentDepCode", false],
-    [m.visitorArrival, "visitorArrCode", true],
-    [m.visitorDeparture, "visitorDepCode", true],
-  ] as const
-  for (const [label, key, visitor] of rows) {
-    const code = properties?.[key]
-    const value = typeof code === "number" ? queueText(code, visitor, m) : m.queueNone
-    card.body.append(fact(label, value))
+  const video = textProp(properties, "video")
+  if (isJamCamUrl(video)) {
+    const play = document.createElement("button")
+    play.type = "button"
+    play.className = "city-card-action"
+    play.textContent = m.playClip
+    play.addEventListener("click", () => {
+      const clip = document.createElement("video")
+      clip.src = video
+      clip.autoplay = true
+      clip.muted = true
+      clip.playsInline = true
+      clip.controls = true
+      clip.poster = still.src
+      clip.className = "city-card-video"
+      figure.replaceChildren(clip)
+      play.remove()
+    })
+    card.root.append(play)
   }
-  const roadName = displayText(m.locale, textProp(properties, "vehicleRoadTc"), textProp(properties, "vehicleRoadEn"))
-  const kmh = properties?.vehicleKmh
-  const band = textProp(properties, "vehicleBand")
-  const vehicle =
-    roadName && typeof kmh === "number" && band
-      ? vehicleSentence(roadName, kmh, band, m)
-      : ""
-  if (vehicle) card.body.append(fact(m.vehicles, vehicle))
-  else card.body.append(paragraph("city-card-copy", m.noVehicleApproach))
   return card.root
 }
 
-export function incidentPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  const title = displayText(m.locale, textProp(properties, "nameTc"), textProp(properties, "name")) || m.incident
-  const card = openCard(title)
-  const location = displayText(m.locale, textProp(properties, "location"), textProp(properties, "locationEn"))
-  const direction = presentBound(
-    displayText(m.locale, textProp(properties, "directionTc"), textProp(properties, "direction")),
-    m.locale,
-  )
-  const place = [location, direction].filter(Boolean).join(" · ")
-  if (place) card.head.append(paragraph("city-card-detail", place))
-  const landmark = displayText(m.locale, textProp(properties, "landmark"), textProp(properties, "landmarkEn"))
-  if (landmark) card.head.append(paragraph("city-card-detail", m.near(landmark)))
-  const content = displayText(m.locale, textProp(properties, "contentTc"), textProp(properties, "content"))
-  if (content) card.body.append(paragraph("city-card-copy", content))
-  const announced = clock(hongKongStamp(textProp(properties, "announced")), m.locale)
-  if (announced) card.body.append(fact(m.announcedLabel, announced))
-  return card.root
-}
-
-export function workPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  const road = displayText(m.locale, textProp(properties, "roadTc"), textProp(properties, "road")) || m.roadWork
-  const card = openCard(road)
-  const place = displayText(m.locale, textProp(properties, "placeTc"), textProp(properties, "place"))
-  const bound = presentBound(displayText(m.locale, textProp(properties, "boundTc"), textProp(properties, "bound")), m.locale)
-  const lane = displayText(m.locale, textProp(properties, "laneTc"), textProp(properties, "lane"))
-  const extra = placeRemainder(road, place)
-  if (extra) card.head.append(paragraph("city-card-detail", extra))
-  if (bound && !extra.includes(bound)) card.body.append(fact(m.boundLabel, bound))
-  if (lane && !extra.includes(lane)) card.body.append(fact(m.laneLabel, lane))
-  const kind = displayText(m.locale, textProp(properties, "kindTc"), textProp(properties, "kind"))
-  if (kind) card.body.append(fact(m.works, kind))
-  const status = workStatus(properties, m)
-  if (status) card.body.append(fact(m.statusLabel, status))
-  const district = localName(textProp(properties, "districtTc"), textProp(properties, "district"), districtName, m)
-  if (district) card.body.append(fact(m.districtLabel, district))
-  const when = timeRange(textProp(properties, "start"), textProp(properties, "end"), m.locale)
+export function disruptionPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+  const card = openCard(textProp(properties, "title") || m.incident)
+  const location = textProp(properties, "location")
+  if (location) card.head.append(paragraph("city-card-detail", location))
+  const category = [textProp(properties, "category"), textProp(properties, "subCategory")].filter(Boolean).join(" · ")
+  if (category) card.body.append(fact(m.categoryLabel, category))
+  const severity = textProp(properties, "severity")
+  if (severity) card.body.append(fact(m.severityLabel, properties?.closure === true ? `${severity} · ${m.closed}` : severity, severityTone(numberProp(properties, "rank") ?? 0, properties?.closure === true)))
+  const when = timeRange(textProp(properties, "start"), textProp(properties, "end"))
   if (when) card.body.append(fact(m.whenLabel, when))
+  const update = textProp(properties, "update")
+  const comments = textProp(properties, "comments")
+  if (comments) card.body.append(paragraph("city-card-copy", comments))
+  if (update && update !== comments) {
+    card.body.append(fact(m.latestLabel, formatStamp(textProp(properties, "updatedAt"))))
+    card.body.append(paragraph("city-card-copy", update))
+  }
   return card.root
 }
 
-export function lrtStationPopup(properties: GeoJSON.GeoJsonProperties, snapshot: LrtResponse | null, m: Messages): HTMLElement {
-  const code = textProp(properties, "code")
-  const record = lrtStation(code)
-  const title = record ? displayText(m.locale, record.tc, record.en) : code || m.lrt
-  const card = openCard(title)
-  const routes = lrtRoutesThrough(code)
-  if (routes.length > 0) card.head.append(paragraph("city-card-detail", routes.join(m.locale === "en" ? ", " : "、")))
-  const listing = snapshot?.ok ? snapshot.boards.find((item) => item.station === code) : null
-  if (!listing || listing.calls.length === 0) {
-    card.body.append(paragraph("city-card-copy", snapshot?.ok ? m.lrtNone : m.lrtFailed))
-    return card.root
-  }
-  const board = document.createElement("div")
-  board.className = "city-card-board"
-  for (const call of listing.calls) {
-    const dest = displayText(m.locale, call.destTc, call.destEn)
-    const when = call.timeType === "D" ? m.mtrDeparts(call.ttnt) : call.ttnt <= 0 ? m.lrtArriving : m.minutes(call.ttnt)
-    board.append(serviceRow(`${call.route} ${m.towards(dest)}`, when, call.plat))
-  }
-  card.body.append(board)
+export function chargePopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+  const card = openCard(textProp(properties, "name") || m.charges)
+  const detail = textProp(properties, "detail")
+  if (detail) card.body.append(paragraph("city-card-copy", detail))
   return card.root
 }
 
-export function lrtTrainPopup(properties: GeoJSON.GeoJsonProperties, snapshot: LrtResponse | null, m: Messages): HTMLElement {
-  const listed = snapshot?.trains.find((item) => item.id === textProp(properties, "id"))
-  const route = textProp(properties, "line") || listed?.line || ""
-  const destCode = textProp(properties, "dest") || listed?.dest || ""
-  const dest = lrtStation(destCode)
-  const destName = dest ? displayText(m.locale, dest.tc, dest.en) : destCode || m.lrt
-  const card = openCard(route ? `${route} ${m.towards(destName)}` : m.lrt)
-  const from = textProp(properties, "from")
-  const to = textProp(properties, "to")
-  const next = lrtStation(to || from || listed?.anchor || "")
-  const nextName = next ? displayText(m.locale, next.tc, next.en) : ""
-  if (nextName) card.body.append(fact(m.mtrNext, nextName))
-  const minutes = numberProp(properties, "minutes") ?? listed?.ttnt ?? 0
-  const when = listed?.timeType === "D" && from === to ? m.mtrDeparts(minutes) : minutes <= 0 ? m.lrtArriving : m.minutes(minutes)
-  card.body.append(fact(m.whenLabel, when))
-  const plat = textProp(properties, "plat") || listed?.plat || ""
-  if (plat) card.body.append(fact(m.mtrPlatform, plat))
-  return card.root
-}
-
-const BOARD_MS = 60_000
-const seenBoards = new Map<string, { at: number; calls: KmbBoardCall[]; routes: string[] }>()
-
-function busStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages, title: string, empty: string, operator: StopOperator): HTMLElement {
-  const heading = readablePlace(displayText(m.locale, textProp(properties, "nameTc"), textProp(properties, "nameEn"))) || title
-  const card = openCard(heading)
-  const id = textProp(properties, "id")
-  const routes = routeList(properties)
-  if (!id) {
-    paintBoard(card.body, [], routes, m, empty)
-    return card.root
-  }
-  mountStopBoard(card.body, operator, id, heading, m, empty, routes)
-  return card.root
-}
-
-function mountStopBoard(body: HTMLElement, operator: StopOperator, id: string, name: string, m: Messages, empty: string, routes: string[]) {
-  const key = `${operator}:${id}`
-  const hit = seenBoards.get(key)
-  if (hit && Date.now() - hit.at < BOARD_MS) {
-    paintBoard(body, hit.calls, hit.routes, m, empty)
-    return
-  }
-  body.replaceChildren(paragraph("city-card-copy", m.boardLoading))
-  void fetch(`/api/board?op=${operator}&id=${encodeURIComponent(id)}`, { cache: "no-store" })
-    .then((response) => response.json())
-    .then((payload: unknown) => {
-      if (!body.isConnected) return
-      const stop = readStopBoard(payload)
-      if (!stop) {
-        markBoardFault({ operator, id, name })
-        paintBoard(body, [], routes, m, boardFailedCopy(operator, m))
-        return
-      }
-      clearBoardFault(operator, id)
-      const nextRoutes = stop.routes.length > 0 ? stop.routes : routes
-      seenBoards.set(key, { at: Date.now(), calls: stop.calls, routes: nextRoutes })
-      paintBoard(body, stop.calls, nextRoutes, m, empty)
-    })
-    .catch(() => {
-      if (!body.isConnected) return
-      markBoardFault({ operator, id, name })
-      paintBoard(body, [], routes, m, boardFailedCopy(operator, m))
-    })
-}
-
-function paintBoard(body: HTMLElement, calls: KmbBoardCall[], routes: string[], m: Messages, empty: string) {
-  body.replaceChildren()
-  const quiet = routesWithoutArrival(routes, calls.map((call) => call.route))
-  if (calls.length === 0 && quiet.length === 0) {
-    body.append(paragraph("city-card-copy", empty))
-    return
-  }
-  const board = document.createElement("div")
-  board.className = "city-card-board"
-  for (const call of calls) board.append(kmbCall(call, m))
-  for (const route of quiet) board.append(routeOnly(route))
-  body.append(board)
-  if (calls.length === 0) body.append(paragraph("city-card-copy", empty))
-}
-
-function readStopBoard(payload: unknown): { calls: KmbBoardCall[]; routes: string[] } | null {
-  if (typeof payload !== "object" || payload === null || !("ok" in payload) || payload.ok !== true) return null
-  if (!("stop" in payload) || typeof payload.stop !== "object" || payload.stop === null) return null
-  const stop = payload.stop as { routes?: unknown; calls?: unknown }
-  const routes = Array.isArray(stop.routes) ? stop.routes.filter((item): item is string => typeof item === "string") : []
-  const calls = Array.isArray(stop.calls) ? stop.calls.flatMap((item) => {
-    if (typeof item !== "object" || item === null) return []
-    const row = item as Record<string, unknown>
-    const route = typeof row.route === "string" ? row.route : ""
-    if (!route) return []
-    return [{
-      route,
-      destTc: typeof row.destTc === "string" ? row.destTc : "",
-      destEn: typeof row.destEn === "string" ? row.destEn : "",
-      originTc: "",
-      originEn: "",
-      arriving: false,
-      eta: typeof row.eta === "string" ? row.eta : "",
-      minutes: typeof row.minutes === "number" ? row.minutes : null,
-      scheduled: row.scheduled === true,
-      remarkTc: typeof row.remarkTc === "string" ? row.remarkTc : "",
-      remarkEn: typeof row.remarkEn === "string" ? row.remarkEn : "",
-      company: row.company === "LWB" ? "LWB" as const : "KMB" as const,
-    }]
-  }) : []
-  return { calls, routes }
-}
-
-function routeOnly(route: string): HTMLElement {
-  const row = document.createElement("div")
-  row.className = "city-card-call"
-  row.append(text("span", "city-card-call-route", route))
-  return row
-}
-
-function routeList(properties: GeoJSON.GeoJsonProperties): string[] {
-  const raw = textProp(properties, "routes")
-  if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((item): item is string => typeof item === "string")
-  } catch {
-    return []
-  }
-}
-
-export function citybusStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  return busStopPopup(properties, m, m.citybus, m.citybusNone, "citybus")
-}
-
-export function kmbStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  return busStopPopup(properties, m, m.kmb, m.kmbNone, "kmb")
-}
-
-export function gmbStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  return busStopPopup(properties, m, m.gmb, m.gmbNone, "gmb")
-}
-
-export function nlbStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  return busStopPopup(properties, m, m.nlb, m.nlbNone, "nlb")
-}
-
-const seenParks = new Map<string, { at: number; spaces: ParkingSpace[] }>()
-
-export function parkingPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  const heading = readablePlace(displayText(m.locale, textProp(properties, "nameTc"), textProp(properties, "nameEn"))) || m.parking
-  const card = openCard(heading)
-  const address = displayText(m.locale, textProp(properties, "addressTc"), textProp(properties, "addressEn"))
-  if (address) card.head.append(paragraph("city-card-detail", address))
-  const height = numberProp(properties, "heightM")
-  if (height != null && height > 0) card.head.append(paragraph("city-card-detail", m.parkingHeight(height)))
-  const id = textProp(properties, "id")
-  if (!id) {
-    card.body.append(paragraph("city-card-copy", m.parkingNone))
-    return card.root
-  }
-  const hit = seenParks.get(id)
-  if (hit && Date.now() - hit.at < BOARD_MS) {
-    paintParking(card.body, hit.spaces, m)
-    return card.root
-  }
-  card.body.replaceChildren(paragraph("city-card-copy", m.boardLoading))
-  void fetch(`/api/parking/vacancy?id=${encodeURIComponent(id)}`, { cache: "no-store" })
-    .then((response) => response.json())
-    .then((payload: unknown) => {
-      if (!card.body.isConnected) return
-      const spaces = readParkingSpaces(payload)
-      if (!spaces) {
-        card.body.replaceChildren(paragraph("city-card-copy", m.parkingFailed))
-        return
-      }
-      seenParks.set(id, { at: Date.now(), spaces })
-      paintParking(card.body, spaces, m)
-    })
-    .catch(() => {
-      if (!card.body.isConnected) return
-      card.body.replaceChildren(paragraph("city-card-copy", m.parkingFailed))
-    })
-  return card.root
-}
-
-function paintParking(body: HTMLElement, spaces: ParkingSpace[], m: Messages) {
-  body.replaceChildren()
-  if (spaces.length === 0) {
-    body.append(paragraph("city-card-copy", m.parkingNone))
-    return
-  }
-  const board = document.createElement("div")
-  board.className = "city-card-board"
-  for (const space of spaces) {
-    board.append(serviceRow(parkingKindLabel(space.kind, m), space.vacancy == null ? m.parkingNone : m.parkingSpaces(space.vacancy)))
-  }
-  body.append(board)
-}
-
-function parkingKindLabel(kind: ParkingKind, m: Messages): string {
-  switch (kind) {
-    case "private":
-      return m.parkingPrivate
-    case "lgv":
-      return m.parkingLgv
-    case "hgv":
-      return m.parkingHgv
-    case "motorcycle":
-      return m.parkingMotorcycle
-    default: {
-      const exhaustive: never = kind
-      return exhaustive
-    }
-  }
-}
-
-function readParkingSpaces(payload: unknown): ParkingSpace[] | null {
-  if (typeof payload !== "object" || payload === null || !("ok" in payload) || payload.ok !== true) return null
-  if (!("spaces" in payload) || !Array.isArray(payload.spaces)) return null
-  return payload.spaces.flatMap((item) => {
-    if (!item || typeof item !== "object") return []
-    const row = item as { kind?: unknown; vacancy?: unknown }
-    if (row.kind !== "private" && row.kind !== "lgv" && row.kind !== "hgv" && row.kind !== "motorcycle") return []
-    const vacancy = typeof row.vacancy === "number" && Number.isFinite(row.vacancy) ? row.vacancy : null
-    return [{ kind: row.kind, vacancy, updated: "" }]
-  })
-}
-
-export function ferryStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  const heading = readablePlace(displayText(m.locale, textProp(properties, "nameTc"), textProp(properties, "nameEn"))) || m.ferry
-  const card = openCard(heading)
-  const calls = kmbBoard(properties)
-  if (calls.length === 0) {
-    card.body.append(paragraph("city-card-copy", m.ferryNone))
-    return card.root
-  }
-  const board = document.createElement("div")
-  board.className = "city-card-board"
-  for (const call of calls) board.append(ferryCall(call, m))
-  card.body.append(board)
-  return card.root
-}
-
-function ferryCall(call: KmbBoardCall, m: Messages): HTMLElement {
-  const row = document.createElement("div")
-  row.className = call.scheduled ? "city-card-call city-card-call-plain city-card-call-timetable" : "city-card-call city-card-call-plain"
-  const badge = ferryBadge(call.route)
-  const service = displayText(m.locale, badge.tc, badge.en)
-  const leg = ferryLeg(call)
-  const place = leg ? readablePlace(displayText(m.locale, leg.tc, leg.en)) : ""
-  const remark = displayText(m.locale, call.remarkTc, call.remarkEn)
-  const headline = place ? (leg?.arriving ? m.fromPlace(place) : m.towards(place)) : service
-  const when = call.minutes == null ? remark || clock(call.eta, m.locale) : m.minutes(call.minutes)
-  row.append(
-    text("span", "city-card-call-dest", headline),
-    text("span", "city-card-call-when", when),
-  )
-  const note = call.scheduled ? remark || service : call.minutes != null && remark ? remark : ""
-  const kind = note || (service && place && service !== place ? service : "")
-  if (kind && kind !== headline) row.append(text("span", "city-card-call-kind", kind))
-  return row
-}
-
-function kmbCall(call: KmbBoardCall, m: Messages): HTMLElement {
-  const row = document.createElement("div")
-  row.className = call.scheduled ? "city-card-call city-card-call-timetable" : "city-card-call"
-  const dest = readablePlace(displayText(m.locale, call.destTc, call.destEn))
-  const when = call.minutes == null ? clock(call.eta, m.locale) : m.minutes(call.minutes)
-  const remark = displayText(m.locale, call.remarkTc, call.remarkEn)
-  const kind = call.scheduled ? m.kmbScheduled : when ? "" : remark
-  row.append(
-    text("span", "city-card-call-route", call.company === "LWB" ? `${call.route} ${m.lwb}` : call.route),
-    text("span", "city-card-call-dest", dest ? m.towards(dest) : ""),
-    text("span", "city-card-call-when", when),
-  )
-  if (kind) row.append(text("span", "city-card-call-kind", kind))
-  return row
-}
-
-const PLACE_ACRONYMS = new Set(["BBI", "MTR", "KMB", "LWB", "HK", "PTI", "GMB", "CTB", "NWFB"])
-
-export function readablePlace(value: string): string {
-  const shaped = /[\u4e00-\u9fff]/.test(value) ? value.replace(/,/g, "，") : value
-  const letters = shaped.replace(/[^A-Za-z]/g, "")
-  if (!letters || letters !== letters.toUpperCase()) return shaped
-  return shaped.replace(/[A-Za-z]+/g, (word, index: number) => {
-    const next = shaped[index + word.length]
-    if (next && /\d/.test(next)) return word
-    if (PLACE_ACRONYMS.has(word)) return word
-    return word.charAt(0) + word.slice(1).toLowerCase()
-  })
-}
-
-type KmbBoardCall = {
-  route: string
-  destTc: string
-  destEn: string
-  originTc: string
-  originEn: string
-  arriving: boolean
-  eta: string
-  minutes: number | null
-  scheduled: boolean
-  remarkTc: string
-  remarkEn: string
-  company?: "KMB" | "LWB"
-}
-
-function kmbBoard(properties: GeoJSON.GeoJsonProperties): KmbBoardCall[] {
-  const raw = textProp(properties, "board")
-  if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.flatMap((item) => {
-      if (typeof item !== "object" || item === null) return []
-      const row = item as Record<string, unknown>
-      const route = typeof row.route === "string" ? row.route : ""
-      if (!route) return []
-      return [{
-        route,
-        destTc: typeof row.destTc === "string" ? row.destTc : "",
-        destEn: typeof row.destEn === "string" ? row.destEn : "",
-        originTc: typeof row.originTc === "string" ? row.originTc : "",
-        originEn: typeof row.originEn === "string" ? row.originEn : "",
-        arriving: row.arriving === true,
-        eta: typeof row.eta === "string" ? row.eta : "",
-        minutes: typeof row.minutes === "number" ? row.minutes : null,
-        scheduled: row.scheduled === true,
-        remarkTc: typeof row.remarkTc === "string" ? row.remarkTc : "",
-        remarkEn: typeof row.remarkEn === "string" ? row.remarkEn : "",
-        company: row.company === "LWB" ? "LWB" : "KMB",
-      }]
-    })
-  } catch {
-    return []
-  }
-}
-
-export function stationPopup(properties: GeoJSON.GeoJsonProperties, snapshot: MtrResponse | null, m: Messages): HTMLElement {
+export function stationPopup(
+  properties: GeoJSON.GeoJsonProperties,
+  snapshot: RailResponse | null,
+  context: TransitContext,
+  mode: RailMode,
+  m: Messages,
+): HTMLElement {
   const code = textProp(properties, "code")
   const record = stationRecord(code)
-  const title = record ? displayText(m.locale, record.tc, record.en) : code || m.mtr
-  const card = openCard(title)
-  const lines = linesThrough(code)
-  const lineNames = lines.map((line) => lineLabel(line, m)).filter(Boolean)
-  if (lineNames.length > 0) card.head.append(paragraph("city-card-detail", lineNames.join(m.locale === "en" ? ", " : "、")))
+  const card = openCard(record?.name ?? (textProp(properties, "name") || m.rail))
+  const lines = linesThrough(code, mode)
+  const names = lines.map((line) => lineRecord(line)?.name ?? line)
+  if (names.length > 0) card.head.append(paragraph("city-card-detail", names.join(", ")))
+  for (const line of lines) {
+    const status = context.lines.find((item) => item.id === line)
+    if (status && status.tone !== "green") card.body.append(fact(lineRecord(line)?.name ?? line, status.status, toneColour(status.tone)))
+  }
+  const lift = context.lifts.find((item) => item.station === record?.name)
+  if (lift) card.body.append(fact(m.liftOutage, ""), paragraph("city-card-copy", lift.message))
+  if (code.startsWith("940GZZLU")) mountCrowding(card.body, code, m)
   if (!snapshot?.ok) {
-    card.body.append(paragraph("city-card-copy", m.mtrFailed))
+    card.body.append(paragraph("city-card-copy", failedCopy(mode, m)))
     return card.root
   }
   const board = document.createElement("div")
@@ -547,162 +122,228 @@ export function stationPopup(properties: GeoJSON.GeoJsonProperties, snapshot: Mt
   let anyTrain = false
   for (const line of lines) {
     const listing = snapshot.boards.find((item) => item.line === line && item.station === code)
-    if (lines.length > 1) board.append(paragraph("city-card-section", lineLabel(line, m)))
-    if (!listing) {
-      board.append(paragraph("city-card-copy", m.noReading))
-      continue
-    }
-    if (listing.message) board.append(paragraph("city-card-copy", listing.message))
-    const callings = nextByDest(listing.trains ?? [])
+    if (lines.length > 1) board.append(paragraph("city-card-section", lineRecord(line)?.name ?? line))
+    const callings = nextByDest(listing?.trains ?? [])
     if (callings.length === 0) {
-      board.append(paragraph("city-card-copy", m.mtrNoTrain))
+      board.append(paragraph("city-card-copy", mode === "river" ? m.riverNone : m.railNoTrain))
       continue
     }
     anyTrain = true
     for (const calling of callings) {
-      const dest = stationRecord(calling.dest)
-      const destName = dest ? displayText(m.locale, dest.tc, dest.en) : calling.dest
-      const when = calling.timeType === "D" ? m.mtrDeparts(calling.ttnt) : calling.ttnt <= 0 ? m.mtrArriving : m.minutes(calling.ttnt)
-      const platform = calling.plat ? m.mtrDue("", calling.plat).replace(/^\s*·\s*/, "") : ""
-      board.append(serviceRow(m.towards(destName), when, platform, calling.delay ? "#8a5a00" : undefined))
+      const when = calling.ttnt < 1 ? m.railArriving : m.minutes(Math.floor(calling.ttnt))
+      const plat = /^\w{1,3}$/.test(calling.plat) ? `${m.railPlatform} ${calling.plat}` : calling.plat
+      board.append(serviceRow(m.towards(calling.destName || calling.dest), when, plat))
     }
   }
-  if (!anyTrain && lines.length === 0) card.body.append(paragraph("city-card-copy", m.mtrNoTrain))
+  if (!anyTrain && lines.length === 0) card.body.append(paragraph("city-card-copy", m.railNoTrain))
   else card.body.append(board)
   return card.root
 }
 
-export function trainPopup(properties: GeoJSON.GeoJsonProperties, snapshot: MtrResponse | null, m: Messages): HTMLElement {
-  const listed = snapshot?.trains.find((item) => item.id === textProp(properties, "id"))
+const crowdingSeen = new Map<string, { at: number; percent: number | null }>()
+
+function mountCrowding(body: HTMLElement, code: string, m: Messages) {
+  const row = fact(m.crowdingLabel, "…")
+  const value = row.querySelector(".city-card-fact-value")
+  const hit = crowdingSeen.get(code)
+  const paint = (percent: number | null) => {
+    if (percent == null) row.remove()
+    else if (value) value.textContent = m.crowding(percent)
+  }
+  body.append(row)
+  if (hit && Date.now() - hit.at < 120_000) {
+    paint(hit.percent)
+    return
+  }
+  void fetch(`/api/crowding?id=${encodeURIComponent(code)}`, { cache: "no-store" })
+    .then((response) => response.json())
+    .then((payload: unknown) => {
+      const percent =
+        typeof payload === "object" && payload !== null && "ok" in payload && payload.ok === true && "percent" in payload && typeof payload.percent === "number"
+          ? payload.percent
+          : null
+      crowdingSeen.set(code, { at: Date.now(), percent })
+      paint(percent)
+    })
+    .catch(() => row.remove())
+}
+
+export function trainPopup(properties: GeoJSON.GeoJsonProperties, snapshot: RailResponse | null, mode: RailMode, m: Messages): HTMLElement {
+  const listed = snapshot?.trains.find((item) => item.id === textProp(properties, "id")) ?? null
   const lineCode = textProp(properties, "line") || listed?.line || ""
   const destCode = textProp(properties, "dest") || listed?.dest || ""
+  const destName = stationRecord(destCode)?.name ?? destCode
+  const card = openCard(destName ? m.towards(destName) : failedCopy(mode, m))
+  const line = lineRecord(lineCode)
+  if (line) card.head.append(paragraph("city-card-detail", line.name))
   const from = textProp(properties, "from")
   const to = textProp(properties, "to")
-  if (!lineCode && !listed) {
-    const card = openCard(m.mtr)
-    card.body.append(paragraph("city-card-copy", m.mtrNoTrain))
-    return card.root
-  }
-  const dest = stationRecord(destCode)
-  const destName = dest ? displayText(m.locale, dest.tc, dest.en) : destCode || m.mtr
-  const card = openCard(m.towards(destName))
-  const line = lineLabel(lineCode, m)
-  if (line) card.head.append(paragraph("city-card-detail", line))
-  const timeType = textProp(properties, "timeType") === "D" || listed?.timeType === "D" ? "D" : "A"
-  const delay = textProp(properties, "delay") === "Y" || listed?.delay === true
-  const plat = textProp(properties, "plat") || listed?.plat || ""
   const minutesOnDot = numberProp(properties, "minutes")
-  const shown =
+  const shown: TrainSpot | null =
     from && to && minutesOnDot != null
-      ? { lng: 0, lat: 0, from, to, clamp: "none" as const, minutes: minutesOnDot }
+      ? { lng: 0, lat: 0, from, to, clamp: "none", minutes: minutesOnDot }
       : listed
         ? projectNetworkTrain(listed, Date.now())
         : null
   const riding = shown != null && shown.from !== shown.to
   const nextCode = riding && shown ? shown.to : from || listed?.anchor || ""
-  const next = stationRecord(nextCode)
-  const nextName = next ? displayText(m.locale, next.tc, next.en) : nextCode
-  if (nextName && (riding || timeType !== "D")) card.body.append(fact(m.mtrNext, nextName))
-  const minutes = shown ? Math.max(0, Math.round(shown.minutes)) : listed?.ttnt ?? 0
-  const when = !riding && timeType === "D" ? m.mtrDeparts(minutes) : minutes <= 0 ? m.mtrArriving : m.minutes(minutes)
-  card.body.append(fact(m.whenLabel, when, delay ? "#8a5a00" : undefined))
-  if (plat) card.body.append(fact(m.mtrPlatform, plat))
-  if (shown) card.body.append(fact(m.mtrPosition, positionSentence(shown, m)))
-  if (delay) card.body.append(fact(m.statusLabel, m.mtrDelayed, "#8a5a00"))
-  card.body.append(paragraph("city-card-aside", m.mtrMethod))
+  const nextName = stationRecord(nextCode)?.name ?? ""
+  if (nextName) card.body.append(fact(m.railNext, nextName))
+  const minutes = shown ? Math.max(0, Math.round(shown.minutes)) : Math.round(listed?.ttnt ?? 0)
+  card.body.append(fact(m.whenLabel, minutes <= 0 ? m.railArriving : m.minutes(minutes)))
+  const plat = textProp(properties, "plat") || listed?.plat || ""
+  if (plat) card.body.append(fact(m.railPlatform, plat))
+  if (shown) card.body.append(fact(m.railPosition, positionSentence(shown, m)))
+  card.body.append(paragraph("city-card-aside", m.railMethod))
   return card.root
 }
 
-export function tollPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
-  const name = textProp(properties, "name")
-  const card = openCard(displayText(m.locale, TUNNEL_TC[name] ?? "", name) || m.tunnel)
-  if (textProp(properties, "band") === "portal") card.head.append(paragraph("city-card-detail", m.tunnelPortal))
-  return card.root
-}
+const BOARD_MS = 30_000
+const seenBoards = new Map<string, { at: number; calls: BusCall[]; routes: string[] }>()
 
-function lineLabel(code: string, m: Messages): string {
-  const line = lineRecord(code)
-  if (!line) return code
-  return displayText(m.locale, line.tc, line.en)
-}
-
-function nextByDest(trains: MtrCalling[]): MtrCalling[] {
-  const best = new Map<string, MtrCalling>()
-  for (const train of trains) {
-    const current = best.get(train.dest)
-    if (!current || train.ttnt < current.ttnt) best.set(train.dest, train)
+export function busStopPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+  const name = textProp(properties, "name") || m.bus
+  const indicator = textProp(properties, "indicator")
+  const card = openCard(indicator ? `${name} (${indicator})` : name)
+  const id = textProp(properties, "id")
+  const routes = listProp(properties, "routes")
+  if (routes.length > 0) card.head.append(paragraph("city-card-detail", routes.join(" · ")))
+  if (!id) {
+    paintBoard(card.body, [], routes, m)
+    return card.root
   }
-  return [...best.values()].sort((a, b) => a.ttnt - b.ttnt || (a.dest < b.dest ? -1 : 1))
+  const hit = seenBoards.get(id)
+  if (hit && Date.now() - hit.at < BOARD_MS) {
+    paintBoard(card.body, hit.calls, hit.routes, m)
+    return card.root
+  }
+  card.body.replaceChildren(paragraph("city-card-copy", m.boardLoading))
+  void fetch(`/api/board?id=${encodeURIComponent(id)}`, { cache: "no-store" })
+    .then((response) => response.json())
+    .then((payload: unknown) => {
+      if (!card.body.isConnected) return
+      const calls = readBusCalls(payload)
+      if (!calls) {
+        markBoardFault({ id, name })
+        paintBoard(card.body, [], routes, m, m.busFailed)
+        return
+      }
+      clearBoardFault(id)
+      seenBoards.set(id, { at: Date.now(), calls, routes })
+      paintBoard(card.body, calls, routes, m)
+    })
+    .catch(() => {
+      if (!card.body.isConnected) return
+      markBoardFault({ id, name })
+      paintBoard(card.body, [], routes, m, m.busFailed)
+    })
+  return card.root
+}
+
+function paintBoard(body: HTMLElement, calls: BusCall[], routes: string[], m: Messages, empty = m.busNone) {
+  body.replaceChildren()
+  const quiet = routesWithoutArrival(routes, calls.map((call) => call.route))
+  if (calls.length === 0) {
+    body.append(paragraph("city-card-copy", empty))
+    return
+  }
+  const board = document.createElement("div")
+  board.className = "city-card-board"
+  for (const call of calls.slice(0, 12)) {
+    const row = document.createElement("div")
+    row.className = "city-card-call"
+    row.append(
+      text("span", "city-card-call-route", call.route),
+      text("span", "city-card-call-dest", call.dest ? m.towards(call.dest) : ""),
+      text("span", "city-card-call-when", call.minutes == null || call.minutes <= 0 ? m.railArriving : m.minutes(call.minutes)),
+    )
+    board.append(row)
+  }
+  for (const route of quiet) {
+    const row = document.createElement("div")
+    row.className = "city-card-call"
+    row.append(text("span", "city-card-call-route", route))
+    board.append(row)
+  }
+  body.append(board)
+}
+
+function readBusCalls(payload: unknown): BusCall[] | null {
+  if (typeof payload !== "object" || payload === null || !("ok" in payload) || payload.ok !== true) return null
+  if (!("stop" in payload) || typeof payload.stop !== "object" || payload.stop === null) return null
+  const calls = (payload.stop as { calls?: unknown }).calls
+  if (!Array.isArray(calls)) return null
+  return calls.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return []
+    const row = item as Record<string, unknown>
+    if (typeof row.route !== "string" || !row.route) return []
+    return [{
+      route: row.route,
+      dest: typeof row.dest === "string" ? row.dest : "",
+      eta: typeof row.eta === "string" ? row.eta : "",
+      minutes: typeof row.minutes === "number" ? row.minutes : null,
+      vehicle: typeof row.vehicle === "string" ? row.vehicle : "",
+    }]
+  })
+}
+
+export function cyclePopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+  const card = openCard(textProp(properties, "name") || m.cycles)
+  card.body.append(
+    fact(m.bikes, String(numberProp(properties, "bikes") ?? 0)),
+    fact(m.ebikes, String(numberProp(properties, "ebikes") ?? 0)),
+    fact(m.emptyDocks, String(numberProp(properties, "empty") ?? 0)),
+  )
+  return card.root
+}
+
+export function airPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+  const card = openCard(textProp(properties, "name") || m.air)
+  const index = numberProp(properties, "index")
+  const band = textProp(properties, "band")
+  card.body.append(fact(m.statusLabel, index == null ? m.airNoData : m.airIndex(band, index), index == null ? undefined : airTone(index)))
+  const species = textProp(properties, "species")
+  if (species && index != null) card.body.append(fact(m.airPollutant, species))
+  return card.root
+}
+
+export function planningPopup(properties: GeoJSON.GeoJsonProperties, m: Messages): HTMLElement {
+  const stage = textProp(properties, "stage")
+  const card = openCard(textProp(properties, "site") || m.planning)
+  card.head.append(paragraph("city-card-detail", stage === "building" ? m.planningBuilding : stage === "pending" ? m.planningPending : m.planningDecided))
+  const authority = textProp(properties, "authority")
+  if (authority) card.body.append(fact(m.authorityLabel, authority))
+  const status = textProp(properties, "status")
+  if (status) card.body.append(fact(m.statusLabel, status))
+  const valid = textProp(properties, "validDate")
+  if (valid) card.body.append(fact(m.validLabel, valid))
+  const commenced = textProp(properties, "commencedDate")
+  if (commenced) card.body.append(fact(m.commencedLabel, commenced))
+  const description = textProp(properties, "description")
+  if (description) card.body.append(paragraph("city-card-copy", clip(description, 420)))
+  return card.root
+}
+
+function failedCopy(mode: RailMode, m: Messages): string {
+  return mode === "rail" ? m.railFailed : mode === "light" ? m.lightFailed : m.riverFailed
+}
+
+function nextByDest(trains: RailCalling[]): RailCalling[] {
+  const best = new Map<string, RailCalling>()
+  for (const train of trains) {
+    const key = train.dest || train.destName
+    const current = best.get(key)
+    if (!current || train.ttnt < current.ttnt) best.set(key, train)
+  }
+  return [...best.values()].sort((a, b) => a.ttnt - b.ttnt).slice(0, 6)
 }
 
 function positionSentence(spot: TrainSpot, m: Messages): string {
-  const from = stationRecord(spot.from)
-  const to = stationRecord(spot.to)
-  const fromName = from ? displayText(m.locale, from.tc, from.en) : spot.from
-  const toName = to ? displayText(m.locale, to.tc, to.en) : spot.to
-  if (spot.clamp === "junction") return m.mtrHeld(toName)
-  if (spot.from === spot.to || spot.clamp === "origin") return m.mtrHere(toName)
-  return m.mtrBetween(fromName, toName)
-}
-
-function crossingLegName(code: string, fallback: string, m: Messages): string {
-  if (code === "CH") return m.crossFull
-  if (code === "EH") return m.easternFull
-  if (code === "WH") return m.westernFull
-  return displayText(m.locale, "", fallback)
-}
-
-function placeLine(place: CameraPlace, m: Messages): string {
-  const parts = [
-    place.bound ? presentBound(place.bound, m.locale) : "",
-    place.side,
-    place.near ? m.near(place.near) : "",
-    place.towards ? m.towards(place.towards) : "",
-  ].filter(Boolean)
-  return parts.join(" · ")
-}
-
-function presentBound(bound: string, locale: Locale): string {
-  const expanded = SHORT_BOUND[bound.trim().toLowerCase()]
-  const source = expanded ?? bound
-  const match = source.match(/^([東南西北东]行|(?:east|west|north|south)bound)(?:\s+(\(\d+\)))?$/i)
-  if (!match?.[1]) return bound
-  const index = match[2] ? ` ${match[2]}` : ""
-  const token = match[1].toLowerCase()
-  if (token.endsWith("bound")) {
-    const english = token.charAt(0).toUpperCase() + token.slice(1)
-    const word = locale === "en" ? english : displayText(locale, BOUND_TC[token] ?? "", english)
-    return `${word}${index}`
-  }
-  const traditional = token === "东行" ? "東行" : match[1]
-  const word = locale === "en" ? BOUND_EN[traditional] ?? traditional : displayText(locale, traditional, BOUND_EN[traditional] ?? "")
-  return `${word}${index}`
-}
-
-function localName(
-  traditional: string,
-  english: string,
-  fallback: (locale: Locale, english: string) => string,
-  m: Messages,
-): string {
-  if (traditional) return displayText(m.locale, traditional, english)
-  return fallback(m.locale, english)
-}
-
-function workStatus(properties: GeoJSON.GeoJsonProperties, m: Messages): string {
-  const traditional = textProp(properties, "statusTc")
-  const english = textProp(properties, "status")
-  if (traditional) return displayText(m.locale, traditional, english)
-  if (/in progress/i.test(english)) return m.worksLive
-  if (/preparation/i.test(english)) return m.worksPrep
-  return english
-}
-
-function placeRemainder(road: string, place: string): string {
-  let rest = place.trim()
-  if (!rest || rest === road) return ""
-  if (road && rest.startsWith(road)) rest = rest.slice(road.length).replace(/^[\s,，、:：\-–—]+/, "").trim()
-  return rest
+  const fromName = stationRecord(spot.from)?.name ?? spot.from
+  const toName = stationRecord(spot.to)?.name ?? spot.to
+  if (spot.clamp === "junction") return m.railHeld(toName)
+  if (spot.from === spot.to || spot.clamp === "origin") return m.railHere(toName)
+  return m.railBetween(fromName, toName)
 }
 
 function openCard(title: string): { root: HTMLElement; head: HTMLElement; body: HTMLElement } {
@@ -717,12 +358,10 @@ function openCard(title: string): { root: HTMLElement; head: HTMLElement; body: 
   return { root, head, body }
 }
 
-function serviceRow(primary: string, when: string, kind = "", tone?: string): HTMLElement {
+function serviceRow(primary: string, when: string, kind = ""): HTMLElement {
   const row = document.createElement("div")
   row.className = "city-card-call city-card-call-plain"
-  const whenNode = text("span", "city-card-call-when", when)
-  if (tone) whenNode.style.color = tone
-  row.append(text("span", "city-card-call-dest", primary), whenNode)
+  row.append(text("span", "city-card-call-dest", primary), text("span", "city-card-call-when", when))
   if (kind) row.append(text("span", "city-card-call-kind", kind))
   return row
 }
@@ -748,21 +387,9 @@ function text<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, 
   return node
 }
 
-function minuteTone(colour: HarbourJourney["colour"]): string {
-  switch (colour) {
-    case "red":
-      return "#b42318"
-    case "amber":
-      return "#8a5a00"
-    case "green":
-      return "#0b7a45"
-    case "none":
-      return "#102033"
-    default: {
-      const exhaustive: never = colour
-      return exhaustive
-    }
-  }
+// Card text is dark on a light card, so tones are the deep shades.
+function toneColour(tone: "red" | "amber" | "green"): string {
+  return tone === "red" ? "#b42318" : tone === "amber" ? "#8a5a00" : "#0b7a45"
 }
 
 function bandTone(band: SpeedBand): string {
@@ -782,42 +409,37 @@ function bandTone(band: SpeedBand): string {
   }
 }
 
-function timeRange(start: string, end: string, locale: Locale): string {
-  const from = clock(start, locale)
-  const to = clock(end, locale)
+function severityTone(rank: number, closure: boolean): string | undefined {
+  if (closure || rank >= 3) return "#b42318"
+  if (rank >= 2) return "#8a5a00"
+  return undefined
+}
+
+function airTone(index: number): string {
+  return index >= 10 ? "#7a0a6e" : index >= 7 ? "#b42318" : index >= 4 ? "#8a5a00" : "#0b7a45"
+}
+
+function timeRange(start: string, end: string): string {
+  const from = formatStamp(start)
+  const to = formatStamp(end)
   if (from && to) return `${from} – ${to}`
   return from || to
 }
 
-function hongKongStamp(value: string): string {
-  if (!value || /(?:Z|[+-]\d{2}:?\d{2})$/.test(value)) return value
-  return `${value}+08:00`
+function clip(value: string, limit: number): string {
+  if (value.length <= limit) return value
+  return `${value.slice(0, limit - 1).trimEnd()}…`
 }
 
-function clock(value: string, locale: Locale): string {
-  if (!value) return ""
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
-  if (locale === "en") {
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Hong_Kong",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      day: "numeric",
-      month: "short",
-    }).format(date)
+function listProp(properties: GeoJSON.GeoJsonProperties, key: string): string[] {
+  const raw = textProp(properties, key)
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []
+  } catch {
+    return []
   }
-  const parts = new Intl.DateTimeFormat(locale, {
-    timeZone: "Asia/Hong_Kong",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    day: "numeric",
-    month: "numeric",
-  }).formatToParts(date)
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ""
-  return `${part("month")}月${part("day")}日 ${part("hour")}:${part("minute")}`
 }
 
 function numberProp(properties: GeoJSON.GeoJsonProperties, key: string): number | null {

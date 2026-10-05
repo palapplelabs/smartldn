@@ -1,5 +1,4 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import { register } from "node:module"
 
 const hook = `
@@ -50,7 +49,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: FetchInit) => {
   })
 }) as typeof fetch
 
-const live = "https://rt.data.gov.hk/v2/transport/citybus/eta/example"
+const live = "https://api.tfl.gov.uk/Line/victoria/Arrivals"
 const raced = await Promise.race([
   fetchUpstream(live, 60_000),
   new Promise<null>((resolve) => setTimeout(() => resolve(null), 300)),
@@ -64,18 +63,24 @@ assert.equal(new TextDecoder().decode(raced.body).includes("network"), true)
 await fetchUpstream(live, 60_000)
 assert.equal(fetches, 1)
 
-const cachedUrl = "https://rt.data.gov.hk/v2/transport/citybus/eta/cached"
+const cachedUrl = "https://api.tfl.gov.uk/Road"
 hits.add(cachedUrl)
 const cached = await fetchUpstream(cachedUrl, 60_000)
 assert.equal(fetches, 1)
 assert.equal(new TextDecoder().decode(cached.body).includes("cache"), true)
 
-const down = await fetchUpstream("https://rt.data.gov.hk/v2/transport/citybus/eta/down", 60_000)
+const down = await fetchUpstream("https://api.tfl.gov.uk/down", 60_000)
 assert.equal(down.status, 503)
 assert.equal(puts, 1)
 
-const memory = readFileSync(new URL("./mtr-feed.ts", import.meta.url), "utf8")
-assert.match(memory, /const MEMORY_URL = "https:\/\/hktraffic-cache\.invalid\/mtr-board-memory"/)
-assert.equal(memory.includes("https://hktraffic.keith-li.workers.dev/internal/"), false)
+// A POST search is shared under its own key, so two different searches to the
+// same address do not answer for each other.
+const search = "https://planningdata.london.gov.uk/api-guest/applications/_search"
+const before = fetches
+await fetchUpstream(search, 60_000, { method: "POST", body: "{}", cacheKey: "https://smartldn-cache.invalid/planning/a" })
+await fetchUpstream(search, 60_000, { method: "POST", body: "{}", cacheKey: "https://smartldn-cache.invalid/planning/a" })
+assert.equal(fetches, before + 1)
+await fetchUpstream(search, 60_000, { method: "POST", body: "{}", cacheKey: "https://smartldn-cache.invalid/planning/b" })
+assert.equal(fetches, before + 2)
 
 console.log("upstream cache ok")

@@ -1,37 +1,31 @@
 "use client"
 
-import { useState, useSyncExternalStore } from "react"
+import { useMemo, useState, useSyncExternalStore } from "react"
 import { useSearchParams } from "next/navigation"
 import { CityMap } from "@/components/city-map"
 import { LayerDock } from "@/components/layer-dock"
 import { OpsHud } from "@/components/ops-hud"
 import { useLiveJson } from "@/components/use-live-json"
 import { useI18n } from "@/components/locale"
-import { decorateControlPoints } from "@/lib/control-points"
-import { PLACE_POLL_MS, placePinZoom } from "@/lib/kmb-view"
-import type { ParkingPlacesResponse } from "@/lib/parking"
-import { inLantau } from "@/lib/lantau"
-import { PICTURE_POLL_MS } from "@/lib/picture"
 import { boardFaultSnapshot, subscribeBoardFaults } from "@/lib/board-status"
+import { thamesCrossings } from "@/lib/crossings"
+import type { FeedFaults } from "@/lib/intel"
+import { PLACE_POLL_MS, placePinZoom } from "@/lib/map-view"
 import { catalogueBoards } from "@/lib/place-arrivals"
 import { preferenceServerSnapshot, preferenceSnapshot, soleLayer, subscribePreferences, updatePreference } from "@/lib/preferences"
-import { hkoLang } from "@/lib/i18n"
 import type {
-  ApproachesResponse,
-  CitybusPlacesResponse,
-  ControlPointsResponse,
-  FerryResponse,
-  GmbPlacesResponse,
-  IncidentsResponse,
-  KmbPlacesResponse,
-  LrtResponse,
-  MtrResponse,
-  NlbPlacesResponse,
-  PictureResponse,
-  TrafficResponse,
+  AirResponse,
+  Basemap,
+  BusPlacesResponse,
+  CamerasResponse,
+  CyclesResponse,
+  DisruptionsResponse,
+  PlanningResponse,
+  RailResponse,
+  RoadsResponse,
+  StatusResponse,
   WarningsResponse,
   WatchLayers,
-  Basemap,
 } from "@/lib/types"
 
 function liveError(error: string | null, body: { ok: boolean; error?: string } | null, fallback: string): string | null {
@@ -41,78 +35,74 @@ function liveError(error: string | null, body: { ok: boolean; error?: string } |
 }
 
 export function Dashboard() {
-  const { locale, messages: m } = useI18n()
+  const { messages: m } = useI18n()
   const search = useSearchParams()
-  const forceDown = search.get("feed") === "down"
   const mapDown = search.get("map") === "down"
   const prefs = useSyncExternalStore(subscribePreferences, preferenceSnapshot, preferenceServerSnapshot)
   const [flyToken, setFlyToken] = useState(0)
   const [mapLive, setMapLive] = useState(!mapDown)
+  const [view, setView] = useState<{ lng: number; lat: number; zoom: number } | null>(null)
+  const [focus, setFocus] = useState<{ id: string; coordinates: [number, number] } | null>(null)
   const layers = prefs.layers
   const basemap = prefs.basemap
-  const trafficLive = useLiveJson<TrafficResponse>(forceDown ? "/api/traffic?simulate=fail" : "/api/traffic")
-  const approachesLive = useLiveJson<ApproachesResponse>("/api/approaches")
-  const pictureLive = useLiveJson<PictureResponse>("/api/picture", PICTURE_POLL_MS)
-  const incidentsLive = useLiveJson<IncidentsResponse>("/api/incidents")
-  const controlLive = useLiveJson<ControlPointsResponse>("/api/control-points")
-  const warningsLive = useLiveJson<WarningsResponse>(`/api/warnings?lang=${hkoLang(locale)}`)
-  const [view, setView] = useState<{ lng: number; lat: number; zoom: number } | null>(null)
   const sole = soleLayer(layers)
-  const kmbQuery =
-    view && view.zoom >= placePinZoom("kmb", sole)
+
+  const roadsLive = useLiveJson<RoadsResponse>("/api/roads")
+  const disruptionsLive = useLiveJson<DisruptionsResponse>("/api/disruptions", 120_000)
+  const statusLive = useLiveJson<StatusResponse>("/api/status")
+  const weatherLive = useLiveJson<WarningsResponse>("/api/weather", 5 * 60_000)
+  const camerasLive = useLiveJson<CamerasResponse>(layers.cameras ? "/api/cameras" : null, 5 * 60_000)
+  const railLive = useLiveJson<RailResponse>(layers.rail ? "/api/rail" : null, 15_000)
+  const lightLive = useLiveJson<RailResponse>(layers.light ? "/api/light" : null, 15_000)
+  const riverLive = useLiveJson<RailResponse>(layers.river ? "/api/river" : null, 30_000)
+  const cyclesLive = useLiveJson<CyclesResponse>(layers.cycles ? "/api/cycles" : null, 2 * 60_000)
+  const airLive = useLiveJson<AirResponse>(layers.air ? "/api/air" : null, 15 * 60_000)
+  const viewQuery = (layer: "bus" | "planning") =>
+    view && view.zoom >= placePinZoom(layer, sole)
       ? `lng=${view.lng.toFixed(3)}&lat=${view.lat.toFixed(3)}&zoom=${view.zoom.toFixed(2)}`
       : null
-  const citybusQuery =
-    view && view.zoom >= placePinZoom("citybus", sole)
-      ? `lng=${view.lng.toFixed(3)}&lat=${view.lat.toFixed(3)}`
-      : null
-  const kmbPlacesUrl = layers.kmb && kmbQuery ? `/api/kmb/places?${kmbQuery}` : null
-  const citybusPlacesUrl = layers.citybus && citybusQuery ? `/api/citybus/places?${citybusQuery}` : null
-  const gmbQuery =
-    view && view.zoom >= placePinZoom("gmb", sole)
-      ? `lng=${view.lng.toFixed(3)}&lat=${view.lat.toFixed(3)}&zoom=${view.zoom.toFixed(2)}`
-      : null
-  const gmbPlacesUrl = layers.gmb && gmbQuery ? `/api/gmb/places?${gmbQuery}` : null
-  const nlbQuery =
-    view && view.zoom >= placePinZoom("nlb", sole) && (sole === "nlb" || inLantau(view.lng, view.lat))
-      ? `lng=${view.lng.toFixed(3)}&lat=${view.lat.toFixed(3)}`
-      : null
-  const nlbPlacesUrl = layers.nlb && nlbQuery ? `/api/nlb/places?${nlbQuery}` : null
-  const parkingWide = sole === "parking"
-  const parkingPlacesUrl =
-    layers.parking && view && view.zoom >= placePinZoom("parking", sole)
-      ? `/api/parking/places?lng=${view.lng.toFixed(3)}&lat=${view.lat.toFixed(3)}&zoom=${view.zoom.toFixed(2)}${parkingWide ? "&wide=1" : ""}`
-      : null
-  const mtrLive = useLiveJson<MtrResponse>("/api/mtr", 15_000)
-  const kmbPlacesLive = useLiveJson<KmbPlacesResponse>(kmbPlacesUrl, PLACE_POLL_MS)
-  const lrtLive = useLiveJson<LrtResponse>(layers.lrt ? "/api/lrt" : null, 15_000)
-  const citybusPlacesLive = useLiveJson<CitybusPlacesResponse>(citybusPlacesUrl, PLACE_POLL_MS)
-  const gmbPlacesLive = useLiveJson<GmbPlacesResponse>(gmbPlacesUrl, PLACE_POLL_MS)
-  const nlbPlacesLive = useLiveJson<NlbPlacesResponse>(nlbPlacesUrl, PLACE_POLL_MS)
-  const ferryLive = useLiveJson<FerryResponse>(layers.ferry ? "/api/ferry" : null, 60_000)
-  const parkingPlacesLive = useLiveJson<ParkingPlacesResponse>(parkingPlacesUrl, PLACE_POLL_MS)
-  const traffic = trafficLive.data
-  const approaches = approachesLive.data
-  const picture = pictureLive.data
-  const incidents = incidentsLive.data
-  const controlPoints = controlLive.data
-  const warnings = warningsLive.data
-  const mtr = mtrLive.data
-  const kmb = catalogueBoards(kmbPlacesLive.data)
-  const lrt = lrtLive.data
-  const citybus = catalogueBoards(citybusPlacesLive.data)
-  const gmb = catalogueBoards(gmbPlacesLive.data)
-  const nlb = catalogueBoards(nlbPlacesLive.data)
-  const ferry = ferryLive.data
-  const trafficLoading = traffic === null && trafficLive.error === null
-  const trafficError = trafficLive.error ?? (traffic && !traffic.ok ? traffic.error ?? "Speed feed failed" : null)
-  const pictureError = pictureLive.error ?? picture?.error ?? (picture && !picture.ok ? "Picture failed" : null)
-  const [focus, setFocus] = useState<{ id: string; coordinates: [number, number] } | null>(null)
-  const intelOpen = prefs.intelOpen
+  const busQuery = viewQuery("bus")
+  const planningQuery = viewQuery("planning")
+  const busLive = useLiveJson<BusPlacesResponse>(layers.bus && busQuery ? `/api/bus/places?${busQuery}` : null, PLACE_POLL_MS)
+  const planningLive = useLiveJson<PlanningResponse>(layers.planning && planningQuery ? `/api/planning?${planningQuery}` : null, PLACE_POLL_MS)
   const boardFaults = useSyncExternalStore(subscribeBoardFaults, boardFaultSnapshot, boardFaultSnapshot)
 
-  const corridors = traffic?.ok ? traffic.corridors : []
-  const boundary = controlPoints?.ok ? decorateControlPoints(controlPoints.points, corridors) : null
+  const roads = roadsLive.data
+  const disruptions = disruptionsLive.data?.ok ? disruptionsLive.data : null
+  const status = statusLive.data?.ok ? statusLive.data : null
+  const weather = weatherLive.data
+  const corridors = useMemo(() => (roads?.ok ? roads.corridors : []), [roads])
+  const lines = useMemo(() => status?.lines ?? [], [status])
+  const lifts = useMemo(() => status?.lifts ?? [], [status])
+  const transit = useMemo(() => ({ lines, lifts }), [lines, lifts])
+  const rail = useMemo(
+    () => ({
+      rail: railLive.data?.ok ? railLive.data : null,
+      light: lightLive.data?.ok ? lightLive.data : null,
+      river: riverLive.data?.ok ? riverLive.data : null,
+    }),
+    [lightLive.data, railLive.data, riverLive.data],
+  )
+  const bus = useMemo(() => catalogueBoards(busLive.data), [busLive.data])
+  const crossings = useMemo(
+    () => thamesCrossings(corridors, [...(disruptions?.incidents.features ?? []), ...(disruptions?.works.features ?? [])], lines),
+    [corridors, disruptions, lines],
+  )
+  const roadsLoading = roads === null && roadsLive.error === null
+  const faults: FeedFaults = {
+    roads: liveError(roadsLive.error, roads, "Road status failed"),
+    disruptions: liveError(disruptionsLive.error, disruptionsLive.data, "Road disruptions failed"),
+    status: liveError(statusLive.error, statusLive.data, "Line status failed"),
+    weather: liveError(weatherLive.error, weather, "Weather failed"),
+    cameras: liveError(camerasLive.error, camerasLive.data, "Cameras failed"),
+    rail: liveError(railLive.error, railLive.data, "Arrivals failed"),
+    light: liveError(lightLive.error, lightLive.data, "Arrivals failed"),
+    river: liveError(riverLive.error, riverLive.data, "Arrivals failed"),
+    cycles: liveError(cyclesLive.error, cyclesLive.data, "Cycle docks failed"),
+    air: liveError(airLive.error, airLive.data, "Air quality failed"),
+    planning: liveError(planningLive.error, planningLive.data, "Planning failed"),
+    map: mapLive ? null : m.mapFailed,
+  }
 
   function setLayers(next: WatchLayers) {
     updatePreference({ layers: next })
@@ -130,18 +120,15 @@ export function Dashboard() {
     <main className="relative h-dvh overflow-hidden bg-[#061018]">
       <CityMap
         corridors={corridors}
-        approaches={approaches?.ok ? approaches.points : []}
-        picture={picture}
-        incidents={incidents?.ok ? incidents.incidents : null}
-        controlPoints={boundary}
-        mtr={mtr?.ok ? mtr : null}
-        kmb={kmb}
-        lrt={lrt?.ok ? lrt : null}
-        citybus={citybus}
-        gmb={gmb}
-        nlb={nlb}
-        ferry={ferry?.ok ? ferry : null}
-        parking={parkingPlacesLive.data?.ok ? parkingPlacesLive.data.parks : null}
+        cameras={camerasLive.data?.ok ? camerasLive.data.cameras : null}
+        works={disruptions?.works ?? null}
+        incidents={disruptions?.incidents ?? null}
+        rail={rail}
+        transit={transit}
+        bus={bus}
+        cycles={cyclesLive.data?.ok ? cyclesLive.data.docks : null}
+        planning={planningLive.data?.ok ? planningLive.data.apps : null}
+        air={airLive.data?.ok ? airLive.data.sites : null}
         onView={setView}
         layers={layers}
         basemap={basemap}
@@ -151,38 +138,28 @@ export function Dashboard() {
         onMap={setMapLive}
       />
       <OpsHud
-        traffic={traffic}
-        trafficLoading={trafficLoading}
-        trafficError={trafficError}
-        approaches={approaches}
-        incidents={incidents?.ok ? incidents.incidents : null}
-        incidentsError={incidentsLive.error ?? (incidents && !incidents.ok ? incidents.error ?? "Special traffic news failed." : null)}
-        works={picture?.works ?? null}
-        controlPoints={boundary}
-        controlError={controlLive.error ?? (controlPoints && !controlPoints.ok ? controlPoints.error ?? "Control point waiting times failed." : null)}
-        warnings={warnings?.warnings ?? []}
-        warningsReady={warnings != null || warningsLive.error != null}
-        warningsError={warningsLive.error ?? warnings?.error ?? null}
-        conditions={warnings?.conditions ?? null}
-        approachesError={approachesLive.error ?? (approaches && !approaches.ok ? approaches.error ?? "Crossing approaches failed." : null)}
+        roads={roads}
+        roadsLoading={roadsLoading}
+        corridors={corridors}
+        incidents={disruptions?.incidents ?? null}
+        works={disruptions?.works ?? null}
+        crossings={crossings}
+        lines={lines}
+        lifts={lifts}
+        warnings={weather?.warnings ?? []}
+        warningsReady={weather != null || weatherLive.error != null}
+        conditions={weather?.conditions ?? null}
+        air={airLive.data?.ok ? airLive.data.sites : []}
+        faults={faults}
         mapLive={mapLive}
-        pictureError={pictureError}
-        mtrError={mtrLive.error ?? (mtr && !mtr.ok ? mtr.error ?? "Next train feed failed" : null)}
-        kmbError={liveError(kmbPlacesLive.error, kmbPlacesLive.data, "KMB stops failed")}
-        lrtError={lrtLive.error ?? (lrt && !lrt.ok ? lrt.error ?? "Light Rail arrivals failed" : null)}
-        citybusError={liveError(citybusPlacesLive.error, citybusPlacesLive.data, "Citybus stops failed")}
-        gmbError={liveError(gmbPlacesLive.error, gmbPlacesLive.data, "Green minibus stops failed")}
-        nlbError={liveError(nlbPlacesLive.error, nlbPlacesLive.data, "New Lantao Bus stops failed")}
-        ferryError={liveError(ferryLive.error, ferryLive.data, "Ferry arrivals failed")}
         boardFaults={boardFaults}
-        open={intelOpen}
+        open={prefs.intelOpen}
         onOpenChange={(open) => updatePreference({ intelOpen: open })}
         onFocus={setFocus}
-        view={view}
       />
       <p
         data-map-chrome="bottom"
-        className="pointer-events-auto absolute bottom-1 left-2 z-30 max-w-[calc(100%-1rem)] bg-[#041018]/92 px-2 py-1 font-[family-name:var(--font-hud)] text-[0.72rem] leading-snug text-white sm:bottom-[0.4rem] sm:left-3 sm:max-w-[min(22rem,calc(100%-26rem))] sm:whitespace-nowrap"
+        className="pointer-events-auto absolute bottom-1 left-2 z-30 max-w-[calc(100%-1rem)] bg-[#041018]/92 px-2 py-1 font-[family-name:var(--font-hud)] text-[0.72rem] leading-snug text-white sm:bottom-[0.4rem] sm:left-3 sm:max-w-[min(26rem,calc(100%-26rem))] sm:whitespace-nowrap"
       >
         {m.creditBy}{" "}
         <a
@@ -195,7 +172,7 @@ export function Dashboard() {
         </a>
         {" / "}
         <a
-          href="https://github.com/keithligh"
+          href="https://github.com/keithligh/hk-traffic-intelligence"
           target="_blank"
           rel="noopener noreferrer"
           className="text-cyan-100 underline decoration-cyan-200/60 underline-offset-2"
@@ -207,35 +184,14 @@ export function Dashboard() {
         layers={layers}
         basemap={basemap}
         counts={{
-          speed: null,
-          cameras: null,
-          works: picture ? picture.works.features.length : null,
-          tolls: null,
-          incidents: incidents ? incidents.incidents.features.length : null,
-          mtr: null,
-          kmb: null,
-          lrt: null,
-          citybus: null,
-          gmb: null,
-          nlb: null,
-          ferry: null,
-          parking: null,
-          control: null,
+          works: disruptions ? disruptions.works.features.length : null,
+          incidents: disruptions ? disruptions.incidents.features.length : null,
         }}
         onSetLayers={setLayers}
         onBasemap={selectBasemap}
         onReplay={() => setFlyToken((value) => value + 1)}
         mapLive={mapLive}
-        pictureError={pictureError}
-        mtrError={mtrLive.error ?? (mtr && !mtr.ok ? mtr.error ?? "Next train feed failed" : null)}
-        kmbError={liveError(kmbPlacesLive.error, kmbPlacesLive.data, "KMB stops failed")}
-        lrtError={lrtLive.error ?? (lrt && !lrt.ok ? lrt.error ?? "Light Rail arrivals failed" : null)}
-        citybusError={liveError(citybusPlacesLive.error, citybusPlacesLive.data, "Citybus stops failed")}
-        gmbError={liveError(gmbPlacesLive.error, gmbPlacesLive.data, "Green minibus stops failed")}
-        nlbError={liveError(nlbPlacesLive.error, nlbPlacesLive.data, "New Lantao Bus stops failed")}
-        ferryError={liveError(ferryLive.error, ferryLive.data, "Ferry arrivals failed")}
-        parkingError={liveError(parkingPlacesLive.error, parkingPlacesLive.data, "Parking catalogue failed")}
-        aboveMarquee={!intelOpen}
+        aboveMarquee={!prefs.intelOpen}
       />
     </main>
   )

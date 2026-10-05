@@ -1,119 +1,80 @@
 "use client"
 
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react"
-import { createPortal, flushSync } from "react-dom"
+import { useEffect, useState, useSyncExternalStore, type KeyboardEvent } from "react"
+import { flushSync } from "react-dom"
 import { useI18n } from "@/components/locale"
-import { boundaryGlance } from "@/lib/control-points"
-import { crossingsFrom, nearestApproach } from "@/lib/crossings"
-import { displayText, formatClock, LOCALE_MARK, LOCALES, type Messages } from "@/lib/i18n"
-import { CHANGELOG, changelogText } from "@/lib/changelog"
+import { formatClock, TIME_ZONE, type Messages } from "@/lib/i18n"
+import { CHANGELOG } from "@/lib/changelog"
 import type { BoardFault } from "@/lib/board-status"
-import { firstOpenBoundary, INTEL_TABS, intelBoard, type IntelItem, type IntelTab } from "@/lib/intel"
+import { INTEL_TABS, intelBoard, type FeedFaults, type IntelItem, type IntelTab } from "@/lib/intel"
 import { preferenceServerSnapshot, preferenceSnapshot, subscribePreferences, updatePreference } from "@/lib/preferences"
-import { formatSpeed } from "@/lib/speed"
-import type { ApproachPoint, ApproachesResponse, HarbourJourney, TrafficResponse, WeatherConditions, WeatherWarning } from "@/lib/types"
+import type { AirSite, Corridor, CrossingTone, LiftOutage, LineStatus, RoadsResponse, ThamesCrossing, WeatherConditions, WeatherWarning } from "@/lib/types"
 import { weatherBar } from "@/lib/warnings"
 
 type OpsHudProps = {
-  traffic: TrafficResponse | null
-  trafficLoading: boolean
-  trafficError: string | null
-  approaches: ApproachesResponse | null
-  approachesError: string | null
+  roads: RoadsResponse | null
+  roadsLoading: boolean
+  corridors: Corridor[]
   incidents: GeoJSON.FeatureCollection | null
-  incidentsError: string | null
   works: GeoJSON.FeatureCollection | null
-  controlPoints: GeoJSON.FeatureCollection | null
-  controlError: string | null
+  crossings: ThamesCrossing[]
+  lines: LineStatus[]
+  lifts: LiftOutage[]
   warnings: WeatherWarning[]
   warningsReady: boolean
-  warningsError: string | null
   conditions: WeatherConditions | null
+  air: AirSite[]
+  faults: FeedFaults
   mapLive: boolean
-  pictureError: string | null
-  mtrError: string | null
-  kmbError: string | null
-  lrtError: string | null
-  citybusError: string | null
-  gmbError: string | null
-  nlbError: string | null
-  ferryError: string | null
   boardFaults: readonly BoardFault[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onFocus: (focus: { id: string; coordinates: [number, number] }) => void
-  view: { lng: number; lat: number; zoom: number } | null
 }
 
-const TONE: Record<HarbourJourney["colour"], string> = {
+const TONE: Record<CrossingTone, string> = {
   red: "#FF5D73",
   amber: "#FFC857",
   green: "#3DDC97",
   none: "#C9D2DC",
 }
 
-const BAR_KEY = {
-  CH: "cross",
-  EH: "eastern",
-  WH: "western",
-} as const
-
 export function OpsHud(props: OpsHudProps) {
-  const { locale, setLocale, messages: m } = useI18n()
-  const clock = useHongKongClock(locale)
+  const { messages: m } = useI18n()
+  const clock = useLondonClock()
   const prefs = useSyncExternalStore(subscribePreferences, preferenceSnapshot, preferenceServerSnapshot)
   const tab = prefs.intelTab
   const setTab = (next: IntelTab) => updatePreference({ intelTab: next })
   const barOpen = prefs.barOpen
   const setBarOpen = (next: boolean) => updatePreference({ barOpen: next })
-  const pinnedOrigin = prefs.pinnedOrigin
-  const setPinnedOrigin = (next: string | null) => updatePreference({ pinnedOrigin: next })
   const open = props.open
-  const approachPoints = props.approaches?.ok ? props.approaches.points : []
-  const nearest = nearestApproach(approachPoints, props.view)
-  const pinned = pinnedOrigin ? approachPoints.find((point) => point.id === pinnedOrigin) ?? null : null
-  const origin = pinned ?? nearest
-  const crossings = crossingsFrom(origin)
-  const islandPoints = approachPoints.filter((point) => point.id.startsWith("H"))
-  const kowloonPoints = approachPoints.filter((point) => point.id.startsWith("K"))
-  const summary = props.traffic?.ok ? props.traffic.summary : null
+  const summary = props.roads?.ok ? props.roads.summary : null
   const totalBands = summary ? summary.free + summary.slow + summary.congested : 0
-  const live = Boolean(summary) && !props.trafficError
+  const live = Boolean(summary) && !props.faults.roads
   const board = intelBoard({
-    trafficError: props.trafficError,
-    traffic: props.traffic,
+    faults: props.faults,
+    corridors: props.corridors,
     incidents: props.incidents,
-    incidentsError: props.incidentsError,
     works: props.works,
-    controlPoints: props.controlPoints,
-    controlError: props.controlError,
-    approaches: props.approaches?.ok ? props.approaches.points : [],
-    approachesError: props.approachesError,
+    crossings: props.crossings,
+    lines: props.lines,
+    lifts: props.lifts,
     warnings: props.warnings,
     warningsReady: props.warningsReady,
-    warningsError: props.warningsError,
     conditions: props.conditions,
-    pictureError: props.pictureError,
-    mtrError: props.mtrError,
-    kmbError: props.kmbError,
-    lrtError: props.lrtError,
-    citybusError: props.citybusError,
-    gmbError: props.gmbError,
-    nlbError: props.nlbError,
-    ferryError: props.ferryError,
-    mapError: props.mapLive ? null : m.mapFailed,
+    air: props.air,
     boardFaults: props.boardFaults,
   }, m)
   const intel = board[tab]
   const ranked = board.ranked
   const urgentCount = ranked.filter((item) => item.urgent).length
   const marqueeSeconds = Math.max(28, ranked.length * 9)
-  const halls = boundaryGlance(props.controlPoints, props.controlError, m)
   const weather = weatherBar(props.warnings, props.conditions)
-  const incidentCount = props.incidents?.features.length ?? 0
+  const incidentCount = props.incidents?.features.filter((feature) => feature.properties?.closure === true || Number(feature.properties?.rank ?? 0) >= 2).length ?? 0
   const firstIncident = board.roads.find((item) => item.kind === "incident" && item.coordinates)
   const worstRoad = board.roads.find((item) => item.coordinates && (item.kind === "jam" || item.kind === "slow" || item.kind === "incident"))
-  const worstHall = firstOpenBoundary(board.boundary)
+  const transit = transitGlance(props.lines, m)
+  const network = networkGlance(summary, m)
   const changeOpen = (next: boolean) => {
     if (next === open) return
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -152,7 +113,7 @@ export function OpsHud(props: OpsHudProps) {
       if (scroll) scroll.classList.toggle("bar-scroll-more", scroll.scrollWidth > scroll.clientWidth + 2)
       const header = document.querySelector<HTMLElement>("[data-map-chrome='top']")
       const panel = document.querySelector<HTMLElement>("[data-map-chrome='panel']")
-      const list = document.getElementById("harbour-intel-list")
+      const list = document.getElementById("city-intel-list")
       const headerBox = header?.getBoundingClientRect()
       const headerVisible = !!headerBox && headerBox.height > 2 && headerBox.left <= 56
       if (open && list && panel && headerVisible && headerBox) {
@@ -219,7 +180,7 @@ export function OpsHud(props: OpsHudProps) {
       root.style.removeProperty("--marquee-bottom")
       root.style.removeProperty("--dock-closed-bottom")
     }
-  }, [barOpen, locale, open, props.mapLive])
+  }, [barOpen, open, props.mapLive])
   return (
     <div className="@container/hud pointer-events-none absolute inset-0 z-[5]">
       {barOpen ? null : (
@@ -247,24 +208,9 @@ export function OpsHud(props: OpsHudProps) {
             <p className="font-[family-name:var(--font-hud)] text-sm text-cyan-50 tabular-nums">{clock}</p>
             <p className="flex items-center gap-1.5 font-[family-name:var(--font-hud)] text-[0.62rem] tracking-[0.14em] text-cyan-100 uppercase">
               <span className={`size-1.5 rounded-full ${live ? "hud-pulse bg-[#3DDC97]" : "bg-[#FFC857]"}`} />
-              {live ? m.live : props.trafficLoading ? m.sync : m.fault}
+              {live ? m.live : props.roadsLoading ? m.sync : m.fault}
               {props.mapLive ? "" : ` · ${m.mapOff}`}
             </p>
-          </div>
-          <div className="hidden shrink-0 border border-white/15 sm:inline-flex" role="group" aria-label={m.language}>
-            {LOCALES.map((item) => (
-              <button
-                key={item}
-                type="button"
-                aria-pressed={locale === item}
-                onClick={() => setLocale(item)}
-                className={`px-1.5 py-1 font-[family-name:var(--font-hud)] text-[0.65rem] ${
-                  locale === item ? "bg-white/10 text-white" : "text-cyan-100/70"
-                }`}
-              >
-                {LOCALE_MARK[item]}
-              </button>
-            ))}
           </div>
           <button
             type="button"
@@ -276,49 +222,17 @@ export function OpsHud(props: OpsHudProps) {
           </button>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          {origin ? (
-            <OriginMenu
-              pinnedId={pinned?.id ?? null}
-              nearest={nearest}
-              island={islandPoints}
-              kowloon={kowloonPoints}
-              onChoose={(id) => {
-                setPinnedOrigin(id)
-                const point = id ? approachPoints.find((item) => item.id === id) : nearest
-                if (point) props.onFocus({ id: `harbour-origin-${point.id}`, coordinates: point.coordinates })
-              }}
-            />
-          ) : null}
           <div className="bar-scroll flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto sm:gap-1.5">
-          {origin ? (["CH", "EH", "WH"] as const).map((code) => {
-            const crossing = crossings.find((item) => item.code === code)
-            if (!crossing) {
-              return (
-                <Metric
-                  key={code}
-                  label={m[BAR_KEY[code]]}
-                  value={m.harbourMissing}
-                  tone={TONE.none}
-                  hint={m.harbourMissingHint}
-                  onClick={() => {
-                    if (origin) props.onFocus({ id: `harbour-origin-${origin.id}`, coordinates: origin.coordinates })
-                  }}
-                />
-              )
-            }
-            const road = displayText(m.locale, crossing.fromTc, crossing.from)
-            const compare = crossing.slower > 0 ? m.slowerBy(crossing.slower) : m.fastestHere
-            return (
-              <Metric
-                key={crossing.code}
-                label={m[BAR_KEY[crossing.code]]}
-                value={m.minutes(crossing.minutes)}
-                tone={TONE[crossing.colour]}
-                hint={`${m.approachHint(road)} ${compare}`}
-                onClick={() => props.onFocus({ id: `crossing-${crossing.code}`, coordinates: crossing.coordinates })}
-              />
-            )
-          }) : null}
+          {props.crossings.map((crossing) => (
+            <Metric
+              key={crossing.id}
+              label={crossing.short}
+              value={crossing.status}
+              tone={TONE[crossing.tone]}
+              hint={m.thamesHint(crossing.name, crossing.detail || crossing.status)}
+              onClick={() => props.onFocus({ id: `crossing-${crossing.id}`, coordinates: crossing.coordinates })}
+            />
+          ))}
           {incidentCount > 0 ? (
             <Metric
               label={m.incident}
@@ -329,11 +243,11 @@ export function OpsHud(props: OpsHudProps) {
             />
           ) : null}
           <Metric
-            label={m.boundary}
-            value={halls.label}
-            tone={TONE[halls.tone]}
-            hint={m.boundaryHint}
-            onClick={() => show("boundary", worstHall)}
+            label={m.transit}
+            value={transit.label}
+            tone={TONE[transit.tone]}
+            hint={m.transitHint}
+            onClick={() => show("transit", undefined)}
           />
           {weather ? (
             <Metric
@@ -344,21 +258,6 @@ export function OpsHud(props: OpsHudProps) {
               onClick={() => show("weather", undefined)}
             />
           ) : null}
-          <div className="inline-flex shrink-0 border border-white/15 sm:hidden" role="group" aria-label={m.language}>
-            {LOCALES.map((item) => (
-              <button
-                key={`bar-${item}`}
-                type="button"
-                aria-pressed={locale === item}
-                onClick={() => setLocale(item)}
-                className={`px-1.5 py-1 font-[family-name:var(--font-hud)] text-[0.65rem] ${
-                  locale === item ? "bg-white/10 text-white" : "text-cyan-100/70"
-                }`}
-              >
-                {LOCALE_MARK[item]}
-              </button>
-            ))}
-          </div>
           <button
             type="button"
             aria-expanded={open && tab === "notes"}
@@ -376,8 +275,8 @@ export function OpsHud(props: OpsHudProps) {
           >
             <p className="font-[family-name:var(--font-hud)] text-[0.58rem] tracking-[0.14em] text-cyan-100/80 uppercase">{m.network}</p>
             <div className="flex items-center gap-2">
-              <p className="font-[family-name:var(--font-hud)] text-sm leading-none text-white tabular-nums sm:text-base">
-                {props.trafficLoading ? "…" : formatSpeed(summary?.meanSpeedKmh ?? null)}
+              <p className="font-[family-name:var(--font-hud)] text-sm leading-none whitespace-nowrap tabular-nums sm:text-base" style={{ color: TONE[network.tone] }}>
+                {props.roadsLoading ? "…" : network.label}
               </p>
               {summary && totalBands > 0 ? (
                 <div className="mt-1 hidden h-1.5 w-14 overflow-hidden bg-white/10 @min-[32rem]/bar:flex" aria-label={bandTitle(summary, m)}>
@@ -399,7 +298,7 @@ export function OpsHud(props: OpsHudProps) {
         </div>
       </header>
       <section
-        id="harbour-intel"
+        id="city-intel"
         data-map-chrome="panel"
         className={
           open
@@ -421,7 +320,7 @@ export function OpsHud(props: OpsHudProps) {
                       type="button"
                       role="tab"
                       aria-selected={selected}
-                      aria-controls="harbour-intel-list"
+                      aria-controls="city-intel-list"
                       tabIndex={selected ? 0 : -1}
                       onClick={() => setTab(id)}
                       onKeyDown={(event) => onTabKey(event, index, setTab)}
@@ -438,7 +337,7 @@ export function OpsHud(props: OpsHudProps) {
               <button
                 type="button"
                 aria-expanded={open}
-                aria-controls="harbour-intel-list"
+                aria-controls="city-intel-list"
                 onClick={() => changeOpen(false)}
                 className="ml-auto shrink-0 border border-white/15 px-2 py-1 font-[family-name:var(--font-hud)] text-[0.65rem] tracking-[0.12em] text-cyan-50 uppercase"
               >
@@ -457,7 +356,7 @@ export function OpsHud(props: OpsHudProps) {
               <button
                 type="button"
                 aria-expanded={open}
-                aria-controls="harbour-intel-list"
+                aria-controls="city-intel-list"
                 onClick={() => changeOpen(true)}
                 className="ml-1 shrink-0 border border-white/15 px-2 py-1 font-[family-name:var(--font-hud)] text-[0.65rem] tracking-[0.12em] text-cyan-50 uppercase"
               >
@@ -468,7 +367,7 @@ export function OpsHud(props: OpsHudProps) {
         </div>
         {open ? (
           <div
-            id="harbour-intel-list"
+            id="city-intel-list"
             role="tabpanel"
             aria-labelledby={`intel-tab-${tab}`}
             className="intel-scroll max-h-[min(26rem,46dvh,var(--intel-list-max,100dvh))] overflow-y-auto border-t border-white/10 px-2 py-2"
@@ -493,122 +392,6 @@ export function OpsHud(props: OpsHudProps) {
   )
 }
 
-function OriginMenu(props: {
-  pinnedId: string | null
-  nearest: ApproachPoint | null
-  island: ApproachPoint[]
-  kowloon: ApproachPoint[]
-  onChoose: (id: string | null) => void
-}) {
-  const { locale, messages: m } = useI18n()
-  const [open, setOpen] = useState(false)
-  const [box, setBox] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const place = () => {
-      const rect = rootRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const width = Math.min(352, window.innerWidth - 16)
-      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
-      const top = Math.round(rect.bottom + 4)
-      setBox({ top, left: Math.round(left), width: Math.round(width), maxHeight: Math.max(160, window.innerHeight - top - 8) })
-    }
-    place()
-    window.addEventListener("resize", place)
-    return () => window.removeEventListener("resize", place)
-  }, [open])
-  useEffect(() => {
-    if (!open) return
-    const close = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false)
-    }
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false)
-    }
-    document.addEventListener("mousedown", close)
-    document.addEventListener("keydown", onKey)
-    return () => {
-      document.removeEventListener("mousedown", close)
-      document.removeEventListener("keydown", onKey)
-    }
-  }, [open])
-  const chosen = props.pinnedId
-    ? [...props.island, ...props.kowloon].find((point) => point.id === props.pinnedId) ?? props.nearest
-    : props.nearest
-  const road = chosen ? displayText(locale, chosen.nameTc, chosen.name) : ""
-  const choose = (id: string | null) => {
-    props.onChoose(id)
-    setOpen(false)
-  }
-  return (
-    <div ref={rootRef} className="relative shrink-0">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label={m.harbourFrom}
-        onClick={() => setOpen((current) => !current)}
-        className="block max-w-28 border border-white/10 bg-black/30 px-1 py-1 text-left sm:max-w-56 sm:px-2"
-      >
-        <span className="block font-[family-name:var(--font-hud)] text-[0.58rem] tracking-[0.14em] text-cyan-100/80 uppercase">{m.harbourFrom}</span>
-        <span className="block truncate font-[family-name:var(--font-hud)] text-sm leading-none text-white sm:text-base">
-          {props.pinnedId ? road : m.followMap(road)}
-        </span>
-      </button>
-      {open && box
-        ? createPortal(
-            <div
-              ref={menuRef}
-              role="listbox"
-              aria-label={m.harbourFrom}
-              style={{ top: box.top, left: box.left, width: box.width, maxHeight: box.maxHeight }}
-              className="fixed z-50 overflow-y-auto border border-cyan-200/30 bg-[#041018] p-1 text-sm text-white shadow-[0_0_24px_rgba(34,211,238,0.12)]"
-            >
-              <OriginChoice selected={props.pinnedId == null} onChoose={() => choose(null)}>
-                {m.followMap(props.nearest ? displayText(locale, props.nearest.nameTc, props.nearest.name) : "")}
-              </OriginChoice>
-              <OriginList label={m.fromIsland} points={props.island} pinnedId={props.pinnedId} onChoose={choose} />
-              <OriginList label={m.fromKowloon} points={props.kowloon} pinnedId={props.pinnedId} onChoose={choose} />
-            </div>,
-            document.body,
-          )
-        : null}
-    </div>
-  )
-}
-
-function OriginList(props: { label: string; points: ApproachPoint[]; pinnedId: string | null; onChoose: (id: string) => void }) {
-  const { locale } = useI18n()
-  if (props.points.length === 0) return null
-  return (
-    <div className="mt-1">
-      <p className="px-2 py-1 font-[family-name:var(--font-hud)] text-[0.58rem] tracking-[0.14em] text-cyan-100/70 uppercase">{props.label}</p>
-      {props.points.map((point) => (
-        <OriginChoice key={point.id} selected={props.pinnedId === point.id} onChoose={() => props.onChoose(point.id)}>
-          {displayText(locale, point.nameTc, point.name)}
-        </OriginChoice>
-      ))}
-    </div>
-  )
-}
-
-function OriginChoice(props: { selected: boolean; onChoose: () => void; children: string }) {
-  return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={props.selected}
-      onClick={props.onChoose}
-      className={`block w-full px-2 py-1.5 text-left whitespace-nowrap text-white hover:bg-white/10 ${props.selected ? "bg-white/10" : ""}`}
-    >
-      {props.children}
-    </button>
-  )
-}
-
 function Metric(props: { label: string; value: string; tone: string; hint?: string; className?: string; onClick: () => void }) {
   return (
     <button
@@ -626,7 +409,7 @@ function Metric(props: { label: string; value: string; tone: string; hint?: stri
 }
 
 function ChangelogList() {
-  const { locale, messages: m } = useI18n()
+  const { messages: m } = useI18n()
   const kind = {
     added: m.changelogAdded,
     fixed: m.changelogFixed,
@@ -637,23 +420,23 @@ function ChangelogList() {
       {CHANGELOG.map((entry) => (
         <li key={entry.id} className="border border-white/10 bg-black/20 px-2 py-1.5">
           <p className="flex flex-wrap items-center gap-2 font-[family-name:var(--font-hud)] text-[0.62rem] tracking-[0.08em] text-cyan-100/80 uppercase">
-            <time dateTime={entry.date}>{changelogDay(entry.date, locale)}</time>
+            <time dateTime={entry.date}>{changelogDay(entry.date)}</time>
             <span className="text-cyan-50">{kind[entry.kind]}</span>
           </p>
-          <p className="mt-1 text-sm leading-5 text-zinc-100">{changelogText(entry, locale)}</p>
+          <p className="mt-1 text-sm leading-5 text-zinc-100">{entry.text}</p>
         </li>
       ))}
     </ol>
   )
 }
 
-function changelogDay(date: string, locale: ReturnType<typeof useI18n>["locale"]): string {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: "Asia/Hong_Kong",
+function changelogDay(date: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "short",
     day: "numeric",
-  }).format(Date.parse(`${date}T00:00:00+08:00`))
+  }).format(Date.parse(`${date}T12:00:00Z`))
 }
 
 function tabLabel(id: IntelTab, m: Messages): string {
@@ -662,8 +445,8 @@ function tabLabel(id: IntelTab, m: Messages): string {
       return m.ranked
     case "roads":
       return m.roads
-    case "boundary":
-      return m.boundary
+    case "transit":
+      return m.transit
     case "weather":
       return m.weather
     case "systems":
@@ -677,9 +460,26 @@ function tabLabel(id: IntelTab, m: Messages): string {
   }
 }
 
-function bandTitle(summary: { free: number; slow: number; congested: number } | null, m: ReturnType<typeof useI18n>["messages"]): string {
+function bandTitle(summary: { free: number; slow: number; congested: number } | null, m: Messages): string {
   if (!summary) return m.network
   return `${m.good} ${summary.free}, ${m.average} ${summary.slow}, ${m.bad} ${summary.congested}`
+}
+
+// The header reads the worst corridor first: any Severe beats any Serious.
+function networkGlance(summary: { free: number; slow: number; congested: number } | null, m: Messages): { label: string; tone: CrossingTone } {
+  if (!summary) return { label: m.noReading, tone: "none" }
+  if (summary.congested > 0) return { label: `${summary.congested} ${m.bad.toLowerCase()}`, tone: "red" }
+  if (summary.slow > 0) return { label: `${summary.slow} ${m.average.toLowerCase()}`, tone: "amber" }
+  return { label: m.good, tone: "green" }
+}
+
+function transitGlance(lines: LineStatus[], m: Messages): { label: string; tone: CrossingTone } {
+  if (lines.length === 0) return { label: m.noReading, tone: "none" }
+  const red = lines.filter((line) => line.tone === "red").length
+  const amber = lines.filter((line) => line.tone === "amber").length
+  if (red > 0) return { label: m.linesDisrupted(red), tone: "red" }
+  if (amber > 0) return { label: m.linesDisrupted(amber), tone: "amber" }
+  return { label: m.goodService, tone: "green" }
 }
 
 function onTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number, setTab: (tab: IntelTab) => void) {
@@ -767,14 +567,14 @@ function quietItem(title: string, label: string): IntelItem {
 
 const CLOCK_PLACEHOLDER = "--:--:--"
 
-function emptyCopy(tab: IntelTab, m: ReturnType<typeof useI18n>["messages"]): string {
+function emptyCopy(tab: IntelTab, m: Messages): string {
   switch (tab) {
     case "ranked":
       return m.emptyRanked
     case "roads":
       return m.emptyRoads
-    case "boundary":
-      return m.emptyBoundary
+    case "transit":
+      return m.emptyTransit
     case "weather":
       return m.emptyWeather
     case "systems":
@@ -788,7 +588,7 @@ function emptyCopy(tab: IntelTab, m: ReturnType<typeof useI18n>["messages"]): st
   }
 }
 
-function useHongKongClock(locale: ReturnType<typeof useI18n>["locale"]): string {
+function useLondonClock(): string {
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
     const tick = () => setNow(new Date())
@@ -797,5 +597,5 @@ function useHongKongClock(locale: ReturnType<typeof useI18n>["locale"]): string 
     return () => window.clearInterval(timer)
   }, [])
   if (!now) return CLOCK_PLACEHOLDER
-  return formatClock(now, locale)
+  return formatClock(now)
 }

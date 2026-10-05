@@ -1,75 +1,62 @@
-import { localeOf, type Locale } from "./i18n.ts"
 import type { Basemap, WatchLayer, WatchLayers } from "./types.ts"
 
-const KEY = "hk-traffic-preferences"
+const KEY = "smartldn-preferences"
 
 const LAYER_IDS: readonly WatchLayer[] = [
-  "speed",
+  "roads",
   "cameras",
   "works",
-  "tolls",
   "incidents",
-  "control",
-  "mtr",
-  "lrt",
-  "kmb",
-  "citybus",
-  "gmb",
-  "nlb",
-  "ferry",
-  "parking",
+  "charges",
+  "rail",
+  "light",
+  "bus",
+  "river",
+  "cycles",
+  "planning",
+  "air",
 ]
 
-const TABS = ["ranked", "roads", "boundary", "weather", "systems", "notes"] as const
+const TABS = ["ranked", "roads", "transit", "weather", "systems", "notes"] as const
 
 export type IntelTabPreference = (typeof TABS)[number]
 
 export type Preferences = {
-  locale: Locale
   layers: WatchLayers
   basemap: Basemap
   ground: Exclude<Basemap, "buildings">
   intelOpen: boolean
   intelTab: IntelTabPreference
   barOpen: boolean
-  pinnedOrigin: string | null
 }
 
+// Planning and air quality are opt-in: they are context, not live movement.
 export const PREFERENCE_DEFAULTS: Preferences = {
-  locale: "zh-HK",
   layers: {
-    speed: true,
+    roads: true,
     cameras: true,
     works: true,
-    tolls: true,
     incidents: true,
-    control: true,
-    mtr: true,
-    lrt: true,
-    kmb: true,
-    citybus: true,
-    gmb: true,
-    nlb: true,
-    ferry: true,
-    parking: true,
+    charges: true,
+    rail: true,
+    light: true,
+    bus: true,
+    river: true,
+    cycles: true,
+    planning: false,
+    air: false,
   },
   basemap: "satellite",
   ground: "satellite",
   intelOpen: true,
   intelTab: "ranked",
   barOpen: true,
-  pinnedOrigin: null,
 }
 
 const listeners = new Set<() => void>()
 let current = PREFERENCE_DEFAULTS
-let serverSnapshot: Preferences = PREFERENCE_DEFAULTS
+const serverSnapshot: Preferences = PREFERENCE_DEFAULTS
 let loaded = false
-
-export function noteServerLocale(locale: Locale) {
-  if (serverSnapshot.locale === locale) return
-  serverSnapshot = { ...PREFERENCE_DEFAULTS, locale }
-}
 
 export function readPreferences(raw: string | null, fallback: Preferences = PREFERENCE_DEFAULTS): Preferences {
   if (!raw) return fallback
@@ -83,14 +70,12 @@ export function readPreferences(raw: string | null, fallback: Preferences = PREF
   const row = parsed as Record<string, unknown>
   const ground = row.ground === "street" || row.ground === "satellite" ? row.ground : fallback.ground
   return {
-    locale: localeOf(typeof row.locale === "string" ? row.locale : fallback.locale),
     layers: readLayers(row.layers, fallback.layers),
     basemap: isBasemap(row.basemap) ? row.basemap : fallback.basemap,
     ground,
     intelOpen: typeof row.intelOpen === "boolean" ? row.intelOpen : fallback.intelOpen,
     intelTab: isTab(row.intelTab) ? row.intelTab : fallback.intelTab,
     barOpen: typeof row.barOpen === "boolean" ? row.barOpen : fallback.barOpen,
-    pinnedOrigin: row.pinnedOrigin === null ? null : typeof row.pinnedOrigin === "string" && row.pinnedOrigin ? row.pinnedOrigin : fallback.pinnedOrigin,
   }
 }
 
@@ -139,7 +124,7 @@ function ensureLoaded(): void {
   if (loaded || typeof window === "undefined") return
   loaded = true
   const raw = storedPreferenceRaw()
-  current = raw ? readPreferences(raw) : { ...PREFERENCE_DEFAULTS, locale: serverSnapshot.locale }
+  current = raw ? readPreferences(raw) : PREFERENCE_DEFAULTS
 }
 
 export function soloLayers(layers: WatchLayers, id: WatchLayer): WatchLayers {

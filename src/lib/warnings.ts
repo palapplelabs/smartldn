@@ -1,4 +1,4 @@
-import type { WeatherConditions, WeatherWarning } from "@/lib/types"
+import type { WeatherConditions, WeatherWarning } from "./types.ts"
 
 export const EMPTY_CONDITIONS: WeatherConditions = {
   temperatureC: null,
@@ -6,95 +6,106 @@ export const EMPTY_CONDITIONS: WeatherConditions = {
   rainfallPlace: "",
 }
 
-export type HkoLang = "en" | "tc" | "sc"
-
-const SHORT_NAME: Record<HkoLang, Record<string, string>> = {
-  en: {
-    WFIRE: "Fire",
-    WFROST: "Frost",
-    WHOT: "Very hot",
-    WCOLD: "Cold",
-    WMSGNL: "Monsoon",
-    WRAIN: "Rainstorm",
-    WFNTSA: "Flooding",
-    WL: "Landslip",
-    WTCSGNL: "Cyclone",
-    WTMW: "Tsunami",
-    WTS: "Thunderstorm",
-  },
-  tc: {
-    WFIRE: "火災",
-    WFROST: "霜凍",
-    WHOT: "酷熱",
-    WCOLD: "寒冷",
-    WMSGNL: "季候風",
-    WRAIN: "暴雨",
-    WFNTSA: "水浸",
-    WL: "山泥傾瀉",
-    WTCSGNL: "熱帶氣旋",
-    WTMW: "海嘯",
-    WTS: "雷暴",
-  },
-  sc: {
-    WFIRE: "火灾",
-    WFROST: "霜冻",
-    WHOT: "酷热",
-    WCOLD: "寒冷",
-    WMSGNL: "季候风",
-    WRAIN: "暴雨",
-    WFNTSA: "水浸",
-    WL: "山泥倾泻",
-    WTCSGNL: "热带气旋",
-    WTMW: "海啸",
-    WTS: "雷暴",
-  },
+const COLOUR_SCORE: Record<string, { score: number; tone: "red" | "amber"; urgent: boolean }> = {
+  red: { score: 900_000, tone: "red", urgent: true },
+  amber: { score: 700_000, tone: "red", urgent: true },
+  yellow: { score: 150_000, tone: "amber", urgent: false },
 }
 
-export function parseWarnsum(payload: unknown, lang: HkoLang = "tc"): WeatherWarning[] {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-    throw new Error("Weather warnings were not in the published shape")
-  }
-  const warnings: WeatherWarning[] = []
-  for (const [key, value] of Object.entries(payload)) {
-    if (typeof value !== "object" || value === null) continue
-    const row = value as Record<string, unknown>
-    const action = text(row.actionCode)
-    const code = text(row.code) || key
-    if (action === "CANCEL" || code === "CANCEL") continue
-    const name = text(row.name) || SHORT_NAME[lang][key] || SHORT_NAME.en[key] || "Weather warning"
-    const type = text(row.type)
-    const rank = classify(code)
-    warnings.push({
-      id: `weather-${key}-${code}`,
-      code,
-      name,
-      shortName: shortName(lang, key, code, type),
-      detail: detailOf(lang, type, text(row.updateTime) || text(row.issueTime)),
-      tone: rank.tone,
-      urgent: rank.urgent,
-      score: rank.score,
-    })
-  }
-  warnings.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
-  return warnings
+// Met Office National Severe Weather Warnings for London & South East England.
+// Item titles read "Yellow warning of rain affecting London & South East England".
+export function parseMetOfficeRss(xml: string): WeatherWarning[] {
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((match) => match[1] ?? "")
+  return items.flatMap((item, index) => {
+    const title = decode(tag(item, "title"))
+    const match = title.match(/^(Red|Amber|Yellow)\s+warning\s+of\s+(.+?)(?:\s+affecting\s+.*)?$/i)
+    if (!match?.[1] || !match[2]) return []
+    const colour = match[1].toLowerCase()
+    const hazard = match[2].trim()
+    const level = COLOUR_SCORE[colour]
+    if (!level) return []
+    const name = `${capital(colour)} warning: ${hazard}`
+    return [
+      {
+        id: `metoffice-${colour}-${hazard.toLowerCase().replace(/\W+/g, "-")}-${index}`,
+        kind: "weather" as const,
+        name,
+        shortName: `${capital(colour)} ${hazard}`,
+        detail: clip(stripTags(decode(tag(item, "description"))), 220),
+        tone: level.tone,
+        urgent: level.urgent,
+        score: level.score,
+      },
+    ]
+  })
 }
 
-export function parseConditions(payload: unknown): WeatherConditions {
-  if (!isRecord(payload)) throw new Error("Current weather was not in the published shape")
-  const temperatures = rowsOf(payload.temperature)
-  const observatory = temperatures.find((row) => /observatory|天文台/i.test(text(row.place))) ?? temperatures[0]
-  const temperatureC = numberOf(observatory?.value)
-  let rainfallMm: number | null = null
-  let rainfallPlace = ""
-  for (const row of rowsOf(payload.rainfall)) {
-    const max = numberOf(row.max)
-    if (max == null) continue
-    if (rainfallMm == null || max > rainfallMm) {
-      rainfallMm = max
-      rainfallPlace = text(row.place)
-    }
+const FLOOD_LEVEL: Record<number, { label: string; score: number; tone: "red" | "amber"; urgent: boolean }> = {
+  1: { label: "Severe flood warning", score: 950_000, tone: "red", urgent: true },
+  2: { label: "Flood warning", score: 650_000, tone: "red", urgent: true },
+  3: { label: "Flood alert", score: 140_000, tone: "amber", urgent: false },
+}
+
+// Environment Agency flood warnings in force. Level 4 means the warning was lifted.
+export function parseFloods(payload: unknown): WeatherWarning[] {
+  if (typeof payload !== "object" || payload === null || !("items" in payload) || !Array.isArray(payload.items)) return []
+  return payload.items.flatMap((raw: unknown) => {
+    if (typeof raw !== "object" || raw === null) return []
+    const row = raw as Record<string, unknown>
+    const level = typeof row.severityLevel === "number" ? FLOOD_LEVEL[row.severityLevel] : undefined
+    if (!level) return []
+    const area = typeof row.description === "string" ? row.description.trim() : ""
+    const id = typeof row.floodAreaID === "string" ? row.floodAreaID : area
+    return [
+      {
+        id: `flood-${id}`,
+        kind: "flood" as const,
+        name: area ? `${level.label}: ${area}` : level.label,
+        shortName: level.tone === "red" ? "Flood" : "Flood alert",
+        detail: clip(typeof row.message === "string" ? row.message.trim() : "", 220),
+        tone: level.tone,
+        urgent: level.urgent,
+        score: level.score,
+      },
+    ]
+  })
+}
+
+const RAIN_STALE_MS = 60 * 60_000
+
+// The heaviest latest 15-minute reading across the London gauges. A gauge that
+// stopped reporting keeps an old "latest" value, so readings over an hour old are left out.
+export function heaviestRain(payload: unknown, stations: ReadonlySet<string>, now: number): number | null {
+  if (typeof payload !== "object" || payload === null || !("items" in payload) || !Array.isArray(payload.items)) return null
+  let heaviest: number | null = null
+  for (const raw of payload.items as unknown[]) {
+    if (typeof raw !== "object" || raw === null) continue
+    const row = raw as { measure?: unknown; value?: unknown; dateTime?: unknown }
+    const measure = typeof row.measure === "string" ? row.measure : ""
+    const station = measure.match(/\/measures\/([^-]+)-rainfall/)?.[1] ?? ""
+    if (!stations.has(station) || typeof row.value !== "number" || !Number.isFinite(row.value) || row.value < 0) continue
+    const at = typeof row.dateTime === "string" ? Date.parse(row.dateTime) : NaN
+    if (!Number.isFinite(at) || now - at > RAIN_STALE_MS) continue
+    if (heaviest == null || row.value > heaviest) heaviest = row.value
   }
-  return { temperatureC, rainfallMm, rainfallPlace }
+  return heaviest == null ? null : Math.round(heaviest * 10) / 10
+}
+
+export function rainStations(payload: unknown): Set<string> {
+  const out = new Set<string>()
+  if (typeof payload !== "object" || payload === null || !("items" in payload) || !Array.isArray(payload.items)) return out
+  for (const raw of payload.items as unknown[]) {
+    if (typeof raw === "object" && raw !== null && "notation" in raw && typeof raw.notation === "string") out.add(raw.notation)
+  }
+  return out
+}
+
+export function parseTemperature(payload: unknown): number | null {
+  if (typeof payload !== "object" || payload === null || !("current" in payload)) return null
+  const current = payload.current
+  if (typeof current !== "object" || current === null || !("temperature_2m" in current)) return null
+  const value = current.temperature_2m
+  return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
 export function weatherBar(
@@ -114,101 +125,34 @@ export function weatherBar(
   if (!conditions || (conditions.temperatureC == null && conditions.rainfallMm == null)) return null
   const temperature = conditions.temperatureC == null ? "" : `${Math.round(conditions.temperatureC)}°C`
   const rain = conditions.rainfallMm == null ? "" : conditions.rainfallMm > 0 ? `${conditions.rainfallMm} mm` : "Dry"
-  const wet = conditions.rainfallMm != null && conditions.rainfallMm >= 10
-  const hot = conditions.temperatureC != null && conditions.temperatureC >= 33
+  const wet = conditions.rainfallMm != null && conditions.rainfallMm >= 4
+  const hot = conditions.temperatureC != null && conditions.temperatureC >= 30
   return { label: [temperature, rain].filter(Boolean).join(" · "), tone: wet || hot ? "amber" : "green" }
 }
 
-function shortName(lang: HkoLang, key: string, code: string, type: string): string {
-  if (key === "WTCSGNL") return cycloneShort(lang, code)
-  if (key === "WRAIN") return rainShort(lang, type)
-  return SHORT_NAME[lang][key] ?? SHORT_NAME.en[key] ?? "Warning"
+function tag(xml: string, name: string): string {
+  const match = xml.match(new RegExp(`<${name}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${name}>`))
+  return match?.[1]?.trim() ?? ""
 }
 
-function rainShort(lang: HkoLang, type: string): string {
-  const amber = /amber|黃|黄/i.test(type)
-  const red = /red|紅|红/i.test(type)
-  const black = /black|黑/i.test(type)
-  if (lang === "en") {
-    if (amber) return "Amber rain"
-    if (red) return "Red rain"
-    if (black) return "Black rain"
-    return "Rainstorm"
-  }
-  if (lang === "tc") {
-    if (amber) return "黃雨"
-    if (red) return "紅雨"
-    if (black) return "黑雨"
-    return "暴雨"
-  }
-  if (amber) return "黄雨"
-  if (red) return "红雨"
-  if (black) return "黑雨"
-  return "暴雨"
+function decode(value: string): string {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&")
 }
 
-function cycloneShort(lang: HkoLang, code: string): string {
-  const signal = code.startsWith("TC8") ? "8" : code === "TC9" ? "9" : code === "TC10" ? "10" : code === "TC3" ? "3" : code === "TC1" ? "1" : ""
-  if (!signal) return SHORT_NAME[lang].WTCSGNL ?? "Cyclone"
-  if (lang === "en") return `Signal ${signal}`
-  const numeral: Record<string, string> = { "1": "一", "3": "三", "8": "八", "9": "九", "10": "十" }
-  const mark = lang === "tc" ? "號" : "号"
-  return `${numeral[signal] ?? signal}${mark}`
+function stripTags(value: string): string {
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
 }
 
-function classify(code: string): { tone: "red" | "amber"; urgent: boolean; score: number } {
-  if (code.startsWith("TC8") || code === "TC9" || code === "TC10" || code === "WRAINB" || code === "WTMW") {
-    return { tone: "red", urgent: true, score: 900_000 }
-  }
-  if (code === "WRAINR" || code === "TC3" || code === "WL" || code === "WFNTSA") {
-    return { tone: "red", urgent: true, score: 720_000 }
-  }
-  if (code === "WRAINA" || code === "WTS" || code === "WMSGNL" || code === "WFIRER" || code === "TC1") {
-    return { tone: "amber", urgent: false, score: 260_000 }
-  }
-  if (code === "WHOT" || code === "WCOLD" || code === "WFROST" || code === "WFIREY") {
-    return { tone: "amber", urgent: false, score: 90_000 }
-  }
-  return { tone: "amber", urgent: false, score: 200_000 }
+function capital(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-function detailOf(lang: HkoLang, type: string, iso: string): string {
-  const clock = clockOf(lang, iso)
-  const updated = lang === "en" ? "updated" : "更新"
-  const when = clock ? `${updated} ${clock}` : ""
-  const detail = [type, when].filter(Boolean).join(" · ")
-  if (detail) return detail
-  return lang === "en" ? "In force" : "生效中"
-}
-
-function clockOf(lang: HkoLang, iso: string): string {
-  if (!iso) return ""
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ""
-  const locale = lang === "tc" ? "zh-HK" : lang === "sc" ? "zh-CN" : "en-GB"
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: "Asia/Hong_Kong",
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(date)
-}
-
-function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : ""
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function rowsOf(value: unknown): Record<string, unknown>[] {
-  if (!isRecord(value) || !Array.isArray(value.data)) return []
-  return value.data.flatMap((row) => (isRecord(row) ? [row] : []))
-}
-
-function numberOf(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null
+function clip(value: string, limit: number): string {
+  if (value.length <= limit) return value
+  return `${value.slice(0, limit - 1).trimEnd()}…`
 }
