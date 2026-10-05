@@ -7,7 +7,7 @@ import { parseLifts, parseLineStatus, toneOf } from "./line-status.ts"
 import { readArrivals } from "./rail-arrivals.ts"
 import { bandOf, corridorsFromStatus, summarize } from "./road-status.ts"
 import type { Corridor } from "./types.ts"
-import { heaviestRain, parseFloods, parseMetOfficeRss, parseTemperature, rainStations, weatherBar } from "./warnings.ts"
+import { heaviestRain, nswwsSnapshotUrl, parseFloods, parseMetOfficeRss, parseNswws, parseTemperature, rainStations, weatherBar } from "./warnings.ts"
 
 const now = Date.parse("2026-10-05T10:05:00Z")
 
@@ -184,6 +184,28 @@ assert.equal(parseTemperature({ current: { temperature_2m: 14.2 } }), 14.2)
 assert.equal(parseTemperature({ reason: "overloaded" }), null)
 assert.deepEqual(weatherBar([], { temperatureC: 14.2, rainfallMm: 0, rainfallPlace: "" }), { label: "14°C · Dry", tone: "green" })
 assert.equal(weatherBar(metOffice, null)?.label, "Yellow rain · Amber wind")
+
+// --- Met Office NSWWS v1.1 warnings with areas ---
+const square = (west: number, south: number, east: number, north: number) => [[[[west, south], [east, south], [east, north], [west, north], [west, south]]]]
+const nswws = parseNswws({
+  type: "FeatureCollection",
+  features: [
+    { type: "Feature", geometry: { type: "MultiPolygon", coordinates: square(-1.2, 51.1, 0.6, 52) }, properties: { warningId: "a1", warningStatus: "ISSUED", warningLevel: "AMBER", warningLikelihood: 3, weatherType: ["RAIN", "THUNDERSTORM"], warningHeadline: "Heavy showers and thunderstorms", validFromDate: "2026-10-06T09:00:00Z", validToDate: "2026-10-06T21:00:00Z" } },
+    { type: "Feature", geometry: { type: "MultiPolygon", coordinates: square(-5, 56, -3, 58) }, properties: { warningId: "scot", warningStatus: "ISSUED", warningLevel: "YELLOW", weatherType: ["SNOW"] } },
+    { type: "Feature", geometry: { type: "MultiPolygon", coordinates: square(-0.3, 51.4, 0.1, 51.6) }, properties: { warningId: "gone", warningStatus: "CANCELLED", warningLevel: "RED", weatherType: ["WIND"] } },
+  ],
+})
+assert.equal(nswws.warnings.length, 1)
+assert.equal(nswws.warnings[0]?.name, "Amber warning: rain, thunderstorm")
+assert.equal(nswws.warnings[0]?.urgent, true)
+assert.match(nswws.warnings[0]?.detail ?? "", /^Heavy showers and thunderstorms · Tue 10:00 to Tue 22:00$/)
+assert.deepEqual(nswws.warnings[0]?.coordinates, [-0.3, 51.55])
+assert.equal(nswws.areas.features.length, 1)
+assert.equal(nswws.areas.features[0]?.properties?.level, "amber")
+assert.deepEqual(parseNswws({ type: "FeatureCollection", features: [] }), { warnings: [], areas: { type: "FeatureCollection", features: [] } })
+const atom = '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><link rel="self" type="application/atom+xml" href="https://data.hub.api.metoffice.gov.uk/nswws/v1.1/objects/feed/"/><link rel="related" type="application/vnd.geo+json" href="https://data.hub.api.metoffice.gov.uk/nswws/v1.1/objects/issued/2bcd0163-c365-4f42-8e09-665757e7f59a/" title="Latest version of all issued warnings"/></feed>'
+assert.equal(nswwsSnapshotUrl(atom), "https://data.hub.api.metoffice.gov.uk/nswws/v1.1/objects/issued/2bcd0163-c365-4f42-8e09-665757e7f59a/")
+assert.equal(nswwsSnapshotUrl('<feed><link rel="related" href="https://evil.example/x"/></feed>'), null)
 
 // --- Santander Cycles, air quality, planning ---
 const docks = parseBikePoints([

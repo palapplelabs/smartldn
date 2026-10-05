@@ -199,6 +199,7 @@ type CityMapProps = {
   cycles: CycleDock[] | null
   planning: PlanningApp[] | null
   air: AirSite[] | null
+  warningAreas: GeoJSON.FeatureCollection | null
   onView: (view: MapView) => void
   layers: WatchLayers
   basemap: Basemap
@@ -222,6 +223,7 @@ export function CityMap({
   cycles,
   planning,
   air,
+  warningAreas,
   onView,
   layers,
   basemap,
@@ -608,13 +610,14 @@ export function CityMap({
       geoJsonSource(map, "cycles")?.setData(layers.cycles && cycles ? cycleCollection(cycles) : emptyCollection())
       geoJsonSource(map, "planning")?.setData(layers.planning && planning ? planningCollection(planning) : emptyCollection())
       geoJsonSource(map, "air")?.setData(layers.air && air ? airCollection(air) : emptyCollection())
+      geoJsonSource(map, "warning-areas")?.setData(warningAreas ?? emptyCollection())
     }
     paint()
     map.on("zoomend", paint)
     return () => {
       map.off("zoomend", paint)
     }
-  }, [air, bus, cameras, cycles, disabled, incidents, layers.air, layers.bus, layers.cycles, layers.planning, mapReady, planning, rail, styleEpoch, works])
+  }, [air, bus, cameras, cycles, disabled, incidents, warningAreas, layers.air, layers.bus, layers.cycles, layers.planning, mapReady, planning, rail, styleEpoch, works])
 
   useEffect(() => {
     const map = mapRef.current

@@ -134,6 +134,7 @@ export function Dashboard() {
         cycles={cyclesLive.data?.ok ? cyclesLive.data.docks : null}
         planning={planningLive.data?.ok ? planningLive.data.apps : null}
         air={airLive.data?.ok ? airLive.data.sites : null}
+        warningAreas={weather?.areas ?? null}
         onView={setView}
         layers={layers}
         basemap={basemap}

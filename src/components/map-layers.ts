@@ -1,4 +1,4 @@
-import type { FilterSpecification, Map } from "maplibre-gl"
+import type { ExpressionSpecification, FilterSpecification, Map } from "maplibre-gl"
 import chargeZones from "../../data/charge-zones.json"
 import { cameraCone, incidentMark } from "@/components/map-icons"
 import { BUS_MIN_ZOOM, STOP_MIN_ZOOM } from "@/lib/map-view"
@@ -74,6 +74,7 @@ export function mountDataLayers(map: Map) {
   map.addSource("incidents", { type: "geojson", data: EMPTY })
   map.addSource("charge-zones", { type: "geojson", data: chargeZones as GeoJSON.FeatureCollection, attribution: "© Greater London Authority" })
   map.addSource("charge-points", { type: "geojson", data: CHARGE_POINTS })
+  map.addSource("warning-areas", { type: "geojson", data: EMPTY, attribution: "© Met Office" })
   for (const mode of RAIL_MODES) {
     map.addSource(`${mode}-track`, { type: "geojson", data: trackCollection(mode), attribution: MODE_STYLE[mode].credit })
     map.addSource(`${mode}-stations`, { type: "geojson", data: stationCollection(mode) })
@@ -87,6 +88,7 @@ export function mountDataLayers(map: Map) {
   map.addSource("planning", { type: "geojson", data: EMPTY, attribution: "© Greater London Authority" })
   map.addSource("air", { type: "geojson", data: EMPTY, attribution: "© Imperial College London" })
   const before = overlaySlot(map)
+  addWarningLayers(map, before)
   addChargeLayers(map, before)
   addRoadLayers(map, before)
   addPointLayers(map, before)
@@ -139,6 +141,24 @@ function addRoadLayers(map: Map, before: string | undefined) {
       "circle-stroke-width": 1.6,
       "circle-pitch-alignment": "map",
     },
+  }, before)
+}
+
+// Met Office warning areas are always drawn: they are rare and they matter.
+// Like the charging zones they take no clicks; the Intel panel holds the detail.
+function addWarningLayers(map: Map, before: string | undefined) {
+  const colour: ExpressionSpecification = ["match", ["get", "level"], "red", "#FF3B4E", "amber", "#FF9F1C", "#FFD60A"]
+  addOverlay(map, {
+    id: "warning-area-fill",
+    type: "fill",
+    source: "warning-areas",
+    paint: { "fill-color": colour, "fill-opacity": 0.12 },
+  }, before)
+  addOverlay(map, {
+    id: "warning-area-line",
+    type: "line",
+    source: "warning-areas",
+    paint: { "line-color": colour, "line-width": 2, "line-opacity": 0.85 },
   }, before)
 }
 

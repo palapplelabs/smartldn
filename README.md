@@ -16,7 +16,7 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 
 **City.** Santander Cycles docks are coloured by bikes available. Air quality comes from the London Air Quality Network. Planning applications from all 35 London planning authorities show sites where work has started, and applications validated in the last four months. The Congestion Charge zone, the London-wide ULEZ, and the Dartford, Blackwall and Silvertown charge points are drawn as a reference layer.
 
-**Weather.** Met Office warnings for London and the South East, Environment Agency flood warnings within Greater London, the temperature in central London, and the heaviest recent rain at the London gauges.
+**Weather.** Met Office warnings that reach Greater London, with their areas drawn on the map, Environment Agency flood warnings within Greater London, the temperature in central London, and the heaviest recent rain at the London gauges.
 
 **Intel.** When several things need attention at once, the Intel panel ranks them: a dead feed, a severe incident, a suspended line, a closed crossing, a severe corridor, serious works, a flood warning, or very high air pollution. The tabs are Ranked, Roads, Transit, Weather, Systems and Updates.
 
@@ -36,7 +36,7 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 | Bus stops and arrivals | TfL `/StopPoint` search and `/StopPoint/{id}/Arrivals` |
 | Live bus positions | DfT [Bus Open Data Service](https://data.bus-data.dft.gov.uk) SIRI-VM, filtered to Greater London (TfL buses report as operator TFLO) |
 | Santander Cycles | TfL `/BikePoint` |
-| Weather warnings | [Met Office warnings RSS, London & South East](https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/se) |
+| Weather warnings | Met Office [Weather DataHub](https://datahub.metoffice.gov.uk) NSWWS warnings API, with warning areas (free key, `METOFFICE_NSWWS_KEY`); without a key, the [warnings RSS for London & South East](https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/se) |
 | Flood warnings and rainfall | Environment Agency [real-time flood-monitoring API](https://environment.data.gov.uk/flood-monitoring/doc/reference) |
 | Temperature | [Open-Meteo](https://open-meteo.com) |
 | Air quality | [London Air Quality Network](https://www.londonair.org.uk), Imperial College London |
@@ -71,7 +71,7 @@ Open [http://127.0.0.1:4317](http://127.0.0.1:4317). Put a free TfL key from [ap
 
 The site runs as a Cloudflare Worker (vinext). Every visitor reads one shared copy of each feed: trains about every fifteen seconds, road status and line status every minute, disruptions every two minutes, and the rest less often. Upstream services see the same traffic whether one person or a thousand have the map open.
 
-1. Set `TFL_APP_KEY` and `BODS_API_KEY` as Worker secrets: `npx wrangler secret put TFL_APP_KEY`, and the same for `BODS_API_KEY`.
+1. Set `TFL_APP_KEY`, `BODS_API_KEY` and `METOFFICE_NSWWS_KEY` as Worker secrets: `npx wrangler secret put TFL_APP_KEY`, and the same for the others.
 2. Optional: create a KV namespace for the daily visit counter and set `SMARTLDN_VISITS_KV_ID` before building (see `cloudflare.config.ts`).
 3. Build and deploy with `npm run build:vinext`, then deploy through your usual Wrangler flow.
 
@@ -82,7 +82,7 @@ The Tube, Elizabeth line and Overground arrivals, and the London bus positions, 
 These need a registration, a server endpoint that receives pushed data, or both, and are planned for a later phase:
 
 - Every borough street-works permit from DfT [Street Manager](https://department-for-transport-streetmanager.github.io/street-manager-docs/open-data/) open data (registration and a webhook).
-- Met Office DataHub observations in place of Open-Meteo (free key).
+- Met Office DataHub Land Observations in place of Open-Meteo for temperature (free key, a separate subscription from the warnings key).
 
 ## License and credit
 

@@ -55,6 +55,7 @@ export type ThamesCrossing = {
 
 export type WeatherWarning = {
   id: string
+  coordinates?: [number, number] | null
   kind: "weather" | "flood"
   name: string
   shortName: string
@@ -76,6 +77,8 @@ export type WarningsResponse = {
   observedAt: string | null
   warnings: WeatherWarning[]
   conditions: WeatherConditions
+  // Met Office warning areas that reach Greater London, when the NSWWS key is set.
+  areas: GeoJSON.FeatureCollection
 }
 
 export type TimeType = "A" | "D"

@@ -251,7 +251,7 @@ function warningsOf(warnings: WeatherWarning[], m: Messages): IntelItem[] {
     title: warning.name,
     detail: warning.detail,
     tone: warning.tone,
-    coordinates: null,
+    coordinates: warning.coordinates ?? null,
   }))
 }
 
