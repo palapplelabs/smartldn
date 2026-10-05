@@ -1,9 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- An outline roundel in the map's own colours: a ring and a bar, no lettering. -->
   <rect width="64" height="64" rx="14" fill="#061018"/>
-  <g stroke-linecap="round">
-    <path d="M14 52C17 34 28 34 28 14" stroke="#7DD3E8" stroke-width="5.5"/>
-    <path d="M42 52C45 34 40 34 40 14" stroke="#7DD3E8" stroke-width="5.5"/>
-    <path d="M28 52C31 34 34 34 34 14" stroke="#E7FBFF" stroke-width="3" stroke-dasharray="7 7"/>
-  </g>
-  <circle cx="51" cy="15" r="4" fill="#FFC857"/>
+  <circle cx="32" cy="32" r="19" stroke="#FF5D73" stroke-width="7"/>
+  <rect x="6.5" y="26" width="51" height="12" rx="2" fill="#061018" stroke="#7DD3E8" stroke-width="4"/>
 </svg>
