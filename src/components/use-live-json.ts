@@ -18,9 +18,11 @@ export function useLiveJson<T extends { ok: boolean }>(url: string | null, inter
     let abort: AbortController | null = null
 
     let running = false
+    let loadedAt = 0
     const load = async () => {
       if (running) return
       running = true
+      loadedAt = Date.now()
       const request = ++generation
       const controller = new AbortController()
       abort = controller
@@ -49,12 +51,21 @@ export function useLiveJson<T extends { ok: boolean }>(url: string | null, inter
       }
     }
 
+    // A tab in the background skips its refreshes, and catches up when it is seen again.
+    const tick = () => {
+      if (!document.hidden) void load()
+    }
+    const onVisible = () => {
+      if (!document.hidden && Date.now() - loadedAt >= intervalMs) void load()
+    }
     void load()
-    const timer = window.setInterval(() => void load(), intervalMs)
+    const timer = window.setInterval(tick, intervalMs)
+    document.addEventListener("visibilitychange", onVisible)
     return () => {
       cancelled = true
       abort?.abort()
       window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", onVisible)
     }
   }, [intervalMs, shareArrivalLane, url])
 
