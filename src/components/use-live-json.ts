@@ -58,7 +58,7 @@ export function useLiveJson<T extends { ok: boolean }>(url: string | null, inter
     const onVisible = () => {
       if (!document.hidden && Date.now() - loadedAt >= intervalMs) void load()
     }
-    void load()
+    tick()
     const timer = window.setInterval(tick, intervalMs)
     document.addEventListener("visibilitychange", onVisible)
     return () => {
