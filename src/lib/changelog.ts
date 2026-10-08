@@ -11,6 +11,12 @@ export type ChangelogEntry = {
 // the upstream project, HK Traffic Intelligence.
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    id: "2026-10-08-analytics-consent",
+    date: "2026-10-08",
+    kind: "added",
+    text: "SmartLDN now asks before counting visits with Google Analytics. Nothing is set unless you accept, and you can change your answer under Updates.",
+  },
+  {
     id: "2026-10-05-bus-next-stops",
     date: "2026-10-05",
     kind: "added",

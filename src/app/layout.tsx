@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { IBM_Plex_Mono, Newsreader, Outfit } from "next/font/google"
+import { Analytics } from "@/components/analytics"
 import "./globals.css"
 
 const outfit = Outfit({
@@ -27,7 +28,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en-GB" className={`${outfit.variable} ${newsreader.variable} ${hud.variable} dark h-full antialiased`}>
-      <body className={`${outfit.className} min-h-full`}>{children}</body>
+      <body className={`${outfit.className} min-h-full`}>
+        {children}
+        <Analytics />
+      </body>
     </html>
   )
 }

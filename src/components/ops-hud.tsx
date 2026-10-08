@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore, type KeyboardEvent } from "react"
 import { flushSync } from "react-dom"
+import { AnalyticsChoice } from "@/components/analytics"
 import { useI18n } from "@/components/locale"
 import { formatClock, TIME_ZONE, type Messages } from "@/lib/i18n"
 import { CHANGELOG } from "@/lib/changelog"
@@ -417,7 +418,10 @@ function ChangelogList() {
   }
   return (
     <ol className="flex flex-col gap-2">
-      <li className="border border-cyan-200/20 bg-cyan-300/5 px-2 py-1.5 text-xs leading-5 text-zinc-200">{m.independence}</li>
+      <li className="border border-cyan-200/20 bg-cyan-300/5 px-2 py-1.5 text-xs leading-5 text-zinc-200">
+        {m.independence}
+        <AnalyticsChoice />
+      </li>
       {CHANGELOG.map((entry) => (
         <li key={entry.id} className="border border-white/10 bg-black/20 px-2 py-1.5">
           <p className="flex flex-wrap items-center gap-2 font-[family-name:var(--font-hud)] text-[0.62rem] tracking-[0.08em] text-cyan-100/80 uppercase">
