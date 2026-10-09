@@ -31,7 +31,7 @@ export const MESSAGES = {
   systems: "Systems",
   changelog: "Updates",
   analyticsTitle: "Analytics",
-  analyticsAsk: "May SmartLDN use Google Analytics to count visits? It sets analytics cookies only if you accept. The map works the same either way.",
+  analyticsAsk: "SmartLDN counts visits without cookies. May it also use Google Analytics for more detail? It sets analytics cookies only if you accept. The map works the same either way.",
   analyticsAccept: "Accept",
   analyticsDecline: "Decline",
   analyticsOn: "Google Analytics: on.",

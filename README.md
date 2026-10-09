@@ -101,7 +101,7 @@ These are worth knowing before relying on the map:
 
 SmartLDN is an independent open-source project. It is not an official TfL, Greater London Authority or Met Office service; check TfL before you travel. Powered by TfL Open Data. Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
 
-The site sets no cookies of its own. It can use Google Analytics to count visits, but only if you accept on the first visit: until then no Google script runs and no analytics cookie is set, and declining changes nothing about the map. You can change your answer any time under Updates, which also deletes the analytics cookies. Analytics cookies are kept to this site's path, never the wider palapple.com domain. Your layer and basemap choices are kept in your own browser so the map opens the way you left it. Map tiles load from OpenFreeMap and Esri, which see the request as any tile server does.
+The site sets no cookies of its own. It counts visits with Cloudflare Web Analytics, which uses no cookies and keeps no identifiers. It can also use Google Analytics for more detail, but only if you accept on the first visit: until then no Google script runs and no analytics cookie is set, and declining changes nothing about the map. You can change your answer any time under Updates, which also deletes the analytics cookies. Analytics cookies are kept to this site's path, never the wider palapple.com domain. Your layer and basemap choices are kept in your own browser so the map opens the way you left it. Map tiles load from OpenFreeMap and Esri, which see the request as any tile server does.
 
 ## License and credit
 

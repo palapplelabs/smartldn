@@ -11,6 +11,21 @@ import { MESSAGES } from "@/lib/i18n"
 // at build time; without it this component renders nothing at all.
 export const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? ""
 
+// Cloudflare Web Analytics counts visits without cookies or identifiers, so it
+// needs no consent and counts the visitors who never answer the banner.
+const CF_BEACON_TOKEN = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN ?? ""
+
+export function VisitBeacon() {
+  if (!CF_BEACON_TOKEN) return null
+  return (
+    <Script
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      strategy="afterInteractive"
+      data-cf-beacon={JSON.stringify({ token: CF_BEACON_TOKEN })}
+    />
+  )
+}
+
 export function Analytics() {
   const consent = useSyncExternalStore(subscribeConsent, consentSnapshot, consentServerSnapshot)
   // Without consent, sweep away anything GA left from an earlier "yes".
