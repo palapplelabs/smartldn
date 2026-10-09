@@ -1,7 +1,7 @@
 "use client"
 
 import Script from "next/script"
-import { useEffect, useSyncExternalStore } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { BASE_PATH } from "@/lib/base-path"
 import { consentServerSnapshot, consentSnapshot, setConsent, subscribeConsent } from "@/lib/analytics-consent"
 import { MESSAGES } from "@/lib/i18n"
@@ -48,36 +48,57 @@ export function Analytics() {
   )
 }
 
+// Shown just after the map settles, centred and in a colour the map controls never
+// use, so it is not mistaken for part of the dashboard. Accept and Decline are
+// styled alike: the visitor is asked, not steered. The dim behind it lets clicks
+// through, so the map stays usable while the question waits.
+const BANNER_DELAY_MS = 1_200
+
 function ConsentBanner() {
   const m = MESSAGES
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShown(true), BANNER_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [])
+  const choice =
+    "flex-1 border border-amber-200/70 bg-amber-300/10 px-3 py-2 font-[family-name:var(--font-hud)] text-xs tracking-[0.1em] text-amber-50 uppercase transition-colors hover:bg-amber-300/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
   return (
     <div
-      role="dialog"
-      aria-label={m.analyticsTitle}
-      className="pointer-events-auto fixed inset-x-3 bottom-3 z-50 mx-auto max-w-md border border-cyan-200/40 bg-[#041018]/95 p-3 text-sm text-zinc-100 shadow-[0_0_24px_rgba(34,211,238,0.12)] backdrop-blur-md"
+      className={`pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 transition-opacity duration-500 motion-reduce:transition-none ${shown ? "opacity-100" : "opacity-0"}`}
     >
-      <p className="leading-5">{m.analyticsAsk}</p>
-      <div className="mt-2 flex gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            ;(window as unknown as Record<string, boolean>)[`ga-disable-${GA_ID}`] = false
-            setConsent("granted")
-          }}
-          className="border border-cyan-200/60 bg-cyan-300/15 px-3 py-1 font-[family-name:var(--font-hud)] text-xs tracking-[0.08em] text-white uppercase"
-        >
-          {m.analyticsAccept}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            clearAnalyticsCookies()
-            setConsent("denied")
-          }}
-          className="border border-white/20 px-3 py-1 font-[family-name:var(--font-hud)] text-xs tracking-[0.08em] text-zinc-200 uppercase"
-        >
-          {m.analyticsDecline}
-        </button>
+      <div
+        role="dialog"
+        aria-labelledby="analytics-title"
+        className={`pointer-events-auto w-full max-w-sm border border-amber-200/50 border-t-4 border-t-amber-300 bg-[#0b0d10]/95 p-4 text-sm text-zinc-100 shadow-[0_12px_48px_rgba(0,0,0,0.6)] backdrop-blur-md transition-transform duration-500 motion-reduce:transition-none ${shown ? "translate-y-0" : "translate-y-3"}`}
+      >
+        <h2 id="analytics-title" className="font-[family-name:var(--font-hud)] text-xs tracking-[0.14em] text-amber-200 uppercase">
+          {m.analyticsTitle}
+        </h2>
+        <p className="mt-2 leading-5">{m.analyticsWhy}</p>
+        <p className="mt-2 leading-5 text-zinc-300">{m.analyticsAsk}</p>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              ;(window as unknown as Record<string, boolean>)[`ga-disable-${GA_ID}`] = false
+              setConsent("granted")
+            }}
+            className={choice}
+          >
+            {m.analyticsAccept}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              clearAnalyticsCookies()
+              setConsent("denied")
+            }}
+            className={choice}
+          >
+            {m.analyticsDecline}
+          </button>
+        </div>
       </div>
     </div>
   )
