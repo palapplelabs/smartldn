@@ -54,13 +54,19 @@ export function Analytics() {
 // through, so the map stays usable while the question waits.
 const BANNER_DELAY_MS = 1_200
 
+// The question is for people, not crawlers: it is left out of the server HTML so
+// search snippets and link previews describe the map instead of the banner.
+const subscribeNothing = () => () => {}
+
 function ConsentBanner() {
   const m = MESSAGES
+  const inBrowser = useSyncExternalStore(subscribeNothing, () => true, () => false)
   const [shown, setShown] = useState(false)
   useEffect(() => {
     const timer = window.setTimeout(() => setShown(true), BANNER_DELAY_MS)
     return () => window.clearTimeout(timer)
   }, [])
+  if (!inBrowser) return null
   const choice =
     "flex-1 border border-amber-200/70 bg-amber-300/10 px-3 py-2 font-[family-name:var(--font-hud)] text-xs tracking-[0.1em] text-amber-50 uppercase transition-colors hover:bg-amber-300/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
   return (

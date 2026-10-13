@@ -1,0 +1,5 @@
+# labs.palapple.com: everything may be crawled.
+User-agent: *
+Allow: /
+
+Sitemap: https://labs.palapple.com/sitemap.xml
