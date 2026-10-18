@@ -38,7 +38,7 @@ import { busMotionCollection, busPosition, noBusMotion, syncBusMotion, type BusM
 import { soleLayer } from "@/lib/preferences"
 import type { Messages } from "@/lib/i18n"
 import { lineRecord, linesThrough, stationCollection, stationPoint, stationRecord, type RailMode } from "@/lib/rail-network"
-import { beginPush, endPush, type PushGate } from "@/lib/frame-push"
+import { beginPush, endPush, pushReady, type PushGate } from "@/lib/frame-push"
 import { advanceRuns, mergeRuns, runCollection, runsFromTrains, type TrainRun } from "@/lib/train-run"
 import type { AirSite, Basemap, BusResponse, BusVehicle, Corridor, CycleDock, PlanningApp, RailResponse, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
 
@@ -69,6 +69,8 @@ const LABEL_REFRESH_MS = 700
 // Buses move a few metres a second, so five redraws a second look smooth.
 const BUS_FRAME_MS = 200
 const BUS_LABEL_CAP = 60
+// Ten pushes a second still reads as smooth motion for dots and trains.
+const PHONE_PUSH_MS = 100
 
 const FLYOVER = [
   { center: [-0.1246, 51.5007] as [number, number], zoom: 13.4, pitch: 60, bearing: -20, duration: 7000, curve: 1.25 },
@@ -401,8 +403,11 @@ export function CityMap({
     let drewParticles = false
     // iOS Safari stops requestAnimationFrame on a WebGL page it considers idle,
     // and a GeoJSON push every frame aborts the tile reload before the dot moves.
+    // Other phones take the same gate at a shorter gap: a push every frame keeps
+    // a phone's main thread and map worker busy re-tiling dots that moved a pixel.
     const ios = iosWebKit()
-    const pushGap = ios ? 140 : 0
+    const gated = ios || narrowScreen()
+    const pushGap = ios ? 140 : gated ? PHONE_PUSH_MS : 0
     const gates: Record<"particles" | "buses" | RailMode, PushGate> = {
       particles: { busy: false, at: 0 },
       buses: { busy: false, at: 0 },
@@ -418,6 +423,9 @@ export function CityMap({
       document.body.appendChild(keep)
     }
     const labelled: Record<RailMode, boolean> = { rail: false, light: false, river: false }
+    // Time owed to motion skipped while a gated source waited for its next push.
+    let particleOwed = 0
+    const trainOwed: Record<RailMode, number> = { rail: 0, light: 0, river: 0 }
     let busesAt = 0
     let drewBuses = false
     let busLabelsDrawn = false
@@ -457,9 +465,13 @@ export function CityMap({
       const particles = geoJsonSource(current, "particles")
       const particlesMoving = layerShown(current, "traffic-particles") && linesRef.current.length > 0 && particlesRef.current.length > 0
       if (particles && particlesMoving) {
-        const moving = particleCollection(linesRef.current, particlesRef.current, dt)
-        if (ios) pushMovingSource(particles, gates.particles, moving, now, pushGap)
-        else particles.setData(moving)
+        particleOwed += dt
+        if (!gated || pushReady(gates.particles, now, pushGap)) {
+          const moving = particleCollection(linesRef.current, particlesRef.current, Math.min(1, particleOwed))
+          particleOwed = 0
+          if (gated) pushMovingSource(particles, gates.particles, moving, now, pushGap)
+          else particles.setData(moving)
+        }
         drewParticles = true
       } else if (particles && drewParticles) {
         particles.setData(emptyCollection())
@@ -469,9 +481,12 @@ export function CityMap({
       for (const mode of RAIL_MODES) {
         const trains = geoJsonSource(current, `${mode}-trains`)
         if (!trains || !layerShown(current, `${mode}-trains`)) continue
-        runsRef.current = { ...runsRef.current, [mode]: advanceRuns(runsRef.current[mode], trainStep, stationPoint) }
+        trainOwed[mode] += trainStep
+        if (gated && !pushReady(gates[mode], now, pushGap)) continue
+        runsRef.current = { ...runsRef.current, [mode]: advanceRuns(runsRef.current[mode], Math.min(1, trainOwed[mode]), stationPoint) }
+        trainOwed[mode] = 0
         const moving = runCollection(runsRef.current[mode], stationPoint)
-        if (ios) pushMovingSource(trains, gates[mode], moving, now, pushGap)
+        if (gated) pushMovingSource(trains, gates[mode], moving, now, pushGap)
         else trains.setData(moving)
       }
       refreshTrainLabels(current, now)
@@ -482,7 +497,7 @@ export function CityMap({
         const showing = layerShown(current, "bus-vehicles") && current.getZoom() >= BUS_MIN_ZOOM && motions.size > 0
         if (vehicles && showing) {
           const moving = busMotionCollection(motions, Date.now())
-          if (ios) pushMovingSource(vehicles, gates.buses, moving, now, pushGap)
+          if (gated) pushMovingSource(vehicles, gates.buses, moving, now, pushGap)
           else vehicles.setData(moving)
           drewBuses = true
         } else if (vehicles && drewBuses) {

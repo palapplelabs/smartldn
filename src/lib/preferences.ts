@@ -53,6 +53,13 @@ export const PREFERENCE_DEFAULTS: Preferences = {
   barOpen: true,
 }
 
+// On a phone the open intel panel covers most of the map and grows as each feed
+// arrives, so a first visit starts with it folded to its one-line bar. A choice
+// the visitor has saved always wins.
+export function firstVisitPreferences(phone: boolean): Preferences {
+  return phone ? { ...PREFERENCE_DEFAULTS, intelOpen: false } : PREFERENCE_DEFAULTS
+}
+
 const listeners = new Set<() => void>()
 let current = PREFERENCE_DEFAULTS
 const serverSnapshot: Preferences = PREFERENCE_DEFAULTS
@@ -124,7 +131,8 @@ function ensureLoaded(): void {
   if (loaded || typeof window === "undefined") return
   loaded = true
   const raw = storedPreferenceRaw()
-  current = raw ? readPreferences(raw) : PREFERENCE_DEFAULTS
+  const phone = window.matchMedia("(max-width: 639px)").matches
+  current = raw ? readPreferences(raw) : firstVisitPreferences(phone)
 }
 
 export function soloLayers(layers: WatchLayers, id: WatchLayer): WatchLayers {

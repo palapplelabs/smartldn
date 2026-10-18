@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { PREFERENCE_DEFAULTS, chooseWatchedLayer, layersBeside, readPreferences, soleLayer, soloLayers } from "./preferences.ts"
+import { PREFERENCE_DEFAULTS, chooseWatchedLayer, firstVisitPreferences, layersBeside, readPreferences, soleLayer, soloLayers } from "./preferences.ts"
 
 const saved = readPreferences(JSON.stringify({
   layers: { bus: false, river: false, roads: "yes" },
@@ -46,5 +46,10 @@ assert.equal(soleLayer(first.layers), "cycles")
 const plain = chooseWatchedLayer(false, onlyCycles, "bus")
 assert.equal(plain.layers.cycles, true)
 assert.equal(plain.layers.bus, true)
+
+assert.equal(firstVisitPreferences(true).intelOpen, false)
+assert.deepEqual(firstVisitPreferences(true).layers, PREFERENCE_DEFAULTS.layers)
+assert.equal(firstVisitPreferences(false), PREFERENCE_DEFAULTS)
+assert.equal(readPreferences(JSON.stringify({ intelOpen: true }), firstVisitPreferences(true)).intelOpen, true)
 
 console.log("preferences ok")
