@@ -51,6 +51,17 @@ export function networkRoutes(mode: RailMode): EstimateRoute[] {
   return network.routes.filter((route) => network.lines[route.line]?.mode === mode)
 }
 
+// Every station with the names of the lines through it, for the search box.
+export function stationList(): { code: string; name: string; lng: number; lat: number; lines: string[] }[] {
+  return Object.entries(network.stations).map(([code, station]) => ({
+    code,
+    name: station.name,
+    lng: station.lng,
+    lat: station.lat,
+    lines: linesThrough(code).map((line) => network.lines[line]?.name ?? line),
+  }))
+}
+
 export function stationRecord(code: string): StationRecord | null {
   return network.stations[code] ?? null
 }

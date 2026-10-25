@@ -144,6 +144,8 @@ export function OpsHud(props: OpsHudProps) {
       } else {
         root.style.removeProperty("--map-dock-bottom")
       }
+      if (headerBox && headerBox.height > 2) root.style.setProperty("--search-top", `${Math.ceil(headerBox.bottom + 8)}px`)
+      else root.style.removeProperty("--search-top")
       if (!headerVisible || !headerBox || window.matchMedia("(min-width: 1024px)").matches) {
         root.style.removeProperty("--map-control-top")
         return
@@ -175,6 +177,7 @@ export function OpsHud(props: OpsHudProps) {
       mutations.disconnect()
       window.removeEventListener("resize", apply)
       root.style.removeProperty("--map-control-top")
+      root.style.removeProperty("--search-top")
       root.style.removeProperty("--map-dock-bottom")
       root.style.removeProperty("--intel-list-max")
       root.style.removeProperty("--intel-bottom")

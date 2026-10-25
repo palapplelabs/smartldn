@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { CityMap } from "@/components/city-map"
 import { LayerDock } from "@/components/layer-dock"
 import { OpsHud } from "@/components/ops-hud"
+import { PlaceSearch } from "@/components/place-search"
 import { useLiveJson } from "@/components/use-live-json"
 import { useI18n } from "@/components/locale"
 import { boardFaultSnapshot, subscribeBoardFaults } from "@/lib/board-status"
@@ -26,6 +27,7 @@ import type {
   RoadsResponse,
   StatusResponse,
   WarningsResponse,
+  SearchPlace,
   WatchLayers,
 } from "@/lib/types"
 
@@ -43,7 +45,8 @@ export function Dashboard() {
   const [flyToken, setFlyToken] = useState(0)
   const [mapLive, setMapLive] = useState(!mapDown)
   const [view, setView] = useState<MapView | null>(null)
-  const [focus, setFocus] = useState<{ id: string; coordinates: [number, number] } | null>(null)
+  const [focus, setFocus] = useState<{ id: string; coordinates: [number, number]; zoom?: number } | null>(null)
+  const [pin, setPin] = useState<SearchPlace | null>(null)
   const layers = prefs.layers
   const basemap = prefs.basemap
   const sole = soleLayer(layers)
@@ -140,6 +143,7 @@ export function Dashboard() {
         basemap={basemap}
         flyToken={flyToken}
         focus={focus}
+        pin={pin}
         disabled={mapDown}
         onMap={setMapLive}
       />
@@ -163,6 +167,16 @@ export function Dashboard() {
         onOpenChange={(open) => updatePreference({ intelOpen: open })}
         onFocus={setFocus}
       />
+      {mapDown ? null : (
+        <PlaceSearch
+          picked={pin != null}
+          onPick={(place) => {
+            setPin(place)
+            setFocus({ id: place.id, coordinates: [place.lng, place.lat], zoom: place.zoom })
+          }}
+          onClear={() => setPin(null)}
+        />
+      )}
       <p
         data-map-chrome="bottom"
         className="pointer-events-auto absolute bottom-1 left-2 z-30 max-w-[calc(100%-1rem)] bg-[#041018]/92 px-2 py-1 font-[family-name:var(--font-hud)] text-[0.72rem] leading-snug text-white sm:bottom-[0.4rem] sm:left-3 sm:max-w-[min(26rem,calc(100%-26rem))] sm:whitespace-nowrap"

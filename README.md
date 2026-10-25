@@ -22,6 +22,8 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 
 **Weather.** Met Office warnings that reach Greater London, with their areas drawn on the map, Environment Agency flood warnings within Greater London, the temperature in central London, and the heaviest recent rain at the London gauges.
 
+**Search.** The box under the header finds a station, place, street, address or postcode in Greater London. Picking a result flies the map there and drops a pin.
+
 **Intel.** When several things need attention at once, the Intel panel ranks them: a dead feed, a severe incident, a suspended line, a closed crossing, a severe corridor, serious works, a flood warning, or very high air pollution. The tabs are Ranked, Roads, Transit, Weather, Systems and Updates.
 
 ## Where the numbers come from
@@ -47,6 +49,8 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 | Planning applications | GLA [Planning London Datahub](https://www.london.gov.uk/programmes-strategies/planning/digital-planning/planning-london-datahub) |
 | Congestion Charge and ULEZ zones | [London Datastore](https://data.london.gov.uk/dataset/london-wide-ultra-low-emission-zone-2023-vd455) |
 | Street map and buildings | [OSM Bright](https://github.com/openmaptiles/osm-bright-gl-style) and [OSM Liberty](https://github.com/maputnik/osm-liberty), served by [OpenFreeMap](https://openfreemap.org), from [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors |
+| Search: places, streets, addresses | [Photon](https://photon.komoot.io) by komoot, on [OpenStreetMap](https://www.openstreetmap.org/copyright) data |
+| Search: postcodes | [postcodes.io](https://postcodes.io). Contains OS data © Crown copyright and database right; contains Royal Mail data © Royal Mail copyright and database right; source: Office for National Statistics, licensed under the Open Government Licence |
 | Satellite photograph | [Esri World Imagery](https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer). Imagery © Esri |
 
 TfL, Environment Agency, Met Office, GLA and London Datastore data are used under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/). Powered by TfL Open Data. The full Hong Kong to London mapping, including what London does not publish, is in [docs/london-data-mapping.md](docs/london-data-mapping.md).

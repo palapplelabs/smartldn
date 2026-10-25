@@ -281,6 +281,22 @@ export type PlanningResponse = {
   apps: PlanningApp[]
 }
 
+export type SearchPlace = {
+  id: string
+  name: string
+  detail: string
+  kind: "station" | "postcode" | "area" | "street" | "place"
+  lng: number
+  lat: number
+  zoom: number
+}
+
+export type SearchResponse = {
+  ok: boolean
+  error?: string
+  places: SearchPlace[]
+}
+
 export type WatchLayer =
   | "roads"
   | "cameras"

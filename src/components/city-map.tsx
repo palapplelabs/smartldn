@@ -5,6 +5,7 @@ import {
   GeoJSONSource,
   GPUInitializationError,
   Map,
+  Marker,
   NavigationControl,
   setWorkerUrl,
   type ErrorEvent,
@@ -40,7 +41,7 @@ import type { Messages } from "@/lib/i18n"
 import { lineRecord, linesThrough, stationCollection, stationPoint, stationRecord, type RailMode } from "@/lib/rail-network"
 import { beginPush, endPush, pushReady, type PushGate } from "@/lib/frame-push"
 import { advanceRuns, mergeRuns, runCollection, runsFromTrains, type TrainRun } from "@/lib/train-run"
-import type { AirSite, Basemap, BusResponse, BusVehicle, Corridor, CycleDock, PlanningApp, RailResponse, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
+import type { AirSite, Basemap, BusResponse, BusVehicle, Corridor, CycleDock, PlanningApp, RailResponse, SearchPlace, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
 
 // Turbopack rewrites MapLibre's own worker URL into a chunk the worker cannot run.
 setWorkerUrl(withBase("/maplibre/maplibre-gl-worker.mjs"))
@@ -207,7 +208,8 @@ type CityMapProps = {
   layers: WatchLayers
   basemap: Basemap
   flyToken: number
-  focus: { id: string; coordinates: [number, number] } | null
+  focus: { id: string; coordinates: [number, number]; zoom?: number } | null
+  pin: SearchPlace | null
   onMap: (available: boolean) => void
   disabled?: boolean
 }
@@ -232,6 +234,7 @@ export function CityMap({
   basemap,
   flyToken,
   focus,
+  pin,
   onMap,
   disabled = false,
 }: CityMapProps) {
@@ -578,11 +581,28 @@ export function CityMap({
     map.stop()
     map.flyTo({
       center: focus.coordinates,
-      zoom: Math.max(map.getZoom(), basemapRef.current === "buildings" && !narrowScreen() ? 15.6 : 14.2),
+      zoom: focus.zoom ?? Math.max(map.getZoom(), basemapRef.current === "buildings" && !narrowScreen() ? 15.6 : 14.2),
       duration: narrowScreen() ? 250 : 900,
       essential: true,
     })
   }, [disabled, focus, mapReady])
+
+  // The searched place: a DOM marker, so it survives basemap changes untouched.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!pin || disabled || !map || !mapReady) return
+    const element = document.createElement("div")
+    element.className = "search-pin"
+    element.setAttribute("role", "img")
+    element.setAttribute("aria-label", pin.name)
+    const label = document.createElement("span")
+    label.textContent = pin.name
+    element.appendChild(label)
+    const marker = new Marker({ element, anchor: "bottom" }).setLngLat([pin.lng, pin.lat]).addTo(map)
+    return () => {
+      marker.remove()
+    }
+  }, [disabled, mapReady, pin])
 
   useEffect(() => {
     const map = mapRef.current
