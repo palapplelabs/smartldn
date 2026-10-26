@@ -11,6 +11,12 @@ export type ChangelogEntry = {
 // the upstream project, HK Traffic Intelligence.
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    id: "2026-10-26-national-rail",
+    date: "2026-10-26",
+    kind: "added",
+    text: "National Rail: London's 433 stations with live departure boards, the stops ahead for each train, and the status of the operators that run into London.",
+  },
+  {
     id: "2026-10-25-search",
     date: "2026-10-25",
     kind: "added",

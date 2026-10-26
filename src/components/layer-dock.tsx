@@ -45,6 +45,8 @@ function layerLabel(id: WatchLayer, m: Messages): string {
       return m.river
     case "cycles":
       return m.cycles
+    case "national":
+      return m.national
     case "planning":
       return m.planning
     case "air":
@@ -80,6 +82,7 @@ const LAYERS: { id: WatchLayer; swatch: string }[] = [
   { id: "incidents", swatch: "bg-[#FF5D73]" },
   { id: "charges", swatch: "bg-[#D7B4FF]" },
   { id: "rail", swatch: "bg-[#E32017]" },
+  { id: "national", swatch: "bg-[#F5F0E6]" },
   { id: "light", swatch: "bg-[#00A4A7]" },
   { id: "bus", swatch: "bg-[#DC241F]" },
   { id: "river", swatch: "bg-[#38BDF8]" },

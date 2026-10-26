@@ -21,6 +21,7 @@ import type {
   BusVehiclesResponse,
   CamerasResponse,
   CyclesResponse,
+  NationalStationsResponse,
   DisruptionsResponse,
   PlanningResponse,
   RailResponse,
@@ -60,6 +61,8 @@ export function Dashboard() {
   const lightLive = useLiveJson<RailResponse>(layers.light ? "/api/light" : null, 15_000)
   const riverLive = useLiveJson<RailResponse>(layers.river ? "/api/river" : null, 30_000)
   const cyclesLive = useLiveJson<CyclesResponse>(layers.cycles ? "/api/cycles" : null, 2 * 60_000)
+  // Station places change rarely; their live alerts are refreshed with the list.
+  const nationalLive = useLiveJson<NationalStationsResponse>(layers.national ? "/api/national/stations" : null, 60 * 60_000)
   const airLive = useLiveJson<AirResponse>(layers.air ? "/api/air" : null, 15 * 60_000)
   const viewQuery = (layer: "bus" | "planning") =>
     view && view.zoom >= placePinZoom(layer, sole)
@@ -106,6 +109,7 @@ export function Dashboard() {
     river: liveError(riverLive.error, riverLive.data, "Arrivals failed"),
     buses: liveError(busesLive.error, busesLive.data, "Bus positions failed"),
     cycles: liveError(cyclesLive.error, cyclesLive.data, "Cycle docks failed"),
+    national: liveError(nationalLive.error, nationalLive.data, "National Rail stations failed"),
     air: liveError(airLive.error, airLive.data, "Air quality failed"),
     planning: liveError(planningLive.error, planningLive.data, "Planning failed"),
     map: mapLive ? null : m.mapFailed,
@@ -135,6 +139,7 @@ export function Dashboard() {
         bus={bus}
         buses={busesLive.data?.ok ? busesLive.data.vehicles : null}
         cycles={cyclesLive.data?.ok ? cyclesLive.data.docks : null}
+        nationalStations={nationalLive.data?.ok ? nationalLive.data.stations : null}
         planning={planningLive.data?.ok ? planningLive.data.apps : null}
         air={airLive.data?.ok ? airLive.data.sites : null}
         warningAreas={weather?.areas ?? null}

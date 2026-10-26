@@ -16,6 +16,8 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 
 **Rail.** Tube, Elizabeth line and Overground trains move along their lines, together with DLR, trams and the Uber Boat river buses. Tube and Elizabeth line trains are followed by the train number TfL publishes. Elsewhere a train's position is estimated from the published minutes and the distance between stations, because TfL does not publish one. Station cards show the next departures, the line status, lift outages and, for Tube stations, how busy the station is against a usual day.
 
+**National Rail.** London's 433 National Rail stations appear from city zoom. A station card reads its live departures from Darwin: time, destination, platform, operator, train length and any delay or cancellation, with station notices and lift alerts. Opening a departure lists the stops still ahead with live times. At stations shared with the Tube, Elizabeth line or Overground, the card links to the TfL card too. The Transit tab carries the status of the 18 operators that run into London.
+
 **Buses.** From district zoom, every bus in view moves on the map from its live GPS position, gliding between reports, with its route and destination on a plate at street level. Opening a London bus shows where it started, its next stops with times from TfL (matched by registration), and its route highlighted on the map. Bus stops show their routes, and a stop card reads the live arrivals.
 
 **City.** Santander Cycles docks are coloured by bikes available. Air quality comes from the London Air Quality Network. Planning applications from all 35 London planning authorities show sites where work has started, and applications validated in the last four months. The Congestion Charge zone, the London-wide ULEZ, and the Dartford, Blackwall and Silvertown charge points are drawn as a reference layer.
@@ -34,6 +36,8 @@ SmartLDN is a London port of [HK Traffic Intelligence](https://github.com/keithl
 | Corridor shapes | [OpenStreetMap](https://www.openstreetmap.org/copyright) ways for each corridor's road numbers, clipped to the bounds TfL publishes (built by `scripts/build-london-data.mjs`) |
 | Road works and incidents | TfL [`/Road/all/Disruption`](https://api.tfl.gov.uk/swagger/ui/index.html#!/Road) |
 | Traffic cameras | TfL JamCams, [`/Place/Type/JamCam`](https://api.tfl.gov.uk/swagger/ui/index.html#!/Place) |
+| National Rail stations, departures and calling points | [Rail Data Marketplace](https://raildata.org.uk): NationalRail Knowledgebase Stations, Darwin Live Departure Board and Service Details (free keys, `RDM_STATIONS_KEY`, `RDM_LDB_KEY`, `RDM_SERVICE_KEY`). National Rail Enquiries |
+| National Rail operator status | TfL [`/Line/Mode/national-rail/Status`](https://api.tfl.gov.uk/swagger/ui/index.html#!/Line) |
 | Tube, Elizabeth line, Overground, DLR, tram, river bus arrivals | TfL [`/Line/{ids}/Arrivals`](https://api.tfl.gov.uk/swagger/ui/index.html#!/Line) |
 | Station and line network | TfL `/Line/{id}/Route/Sequence` (built by `scripts/build-london-data.mjs`) |
 | Line status | TfL `/Line/Mode/{modes}/Status` |
@@ -91,6 +95,7 @@ These are worth knowing before relying on the map:
 
 - **Road colours are a status, not a speed.** TfL publishes Good, Serious, Severe or Closed for 24 corridors and no live road speeds. A few central corridors (Inner Ring, City Route, the cross routes) are drawn from the road numbers they are signed on, so their shapes are approximate.
 - **Train positions outside the Tube are estimates.** Tube and Elizabeth line trains are followed by the train number TfL publishes; DLR, Overground, tram and river positions are worked out from the published minutes and the distance between stations. Rail lines are drawn straight between stations.
+- **National Rail trains are not drawn moving.** Stations show live departure boards, but no open feed places each train between stations; that would need Network Rail's signalling feeds.
 - **Buses lag by up to about a minute.** Each bus reports every 10 to 30 seconds and the feed is read every 20 seconds. About one London bus in four has no TfL stop predictions (out of service or finishing a trip).
 - **The Thames crossings have no journey times.** None is published as open data; each crossing shows its TfL status or the notices that name it.
 - **Accessibility is partial and not yet audited.** The panels, tabs and controls are real buttons and tabs that work from the keyboard, but the map itself is visual. Everything urgent is also listed as text in the Intel panel.

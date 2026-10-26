@@ -33,6 +33,7 @@ export type FeedFaults = {
   river: string | null
   buses: string | null
   cycles: string | null
+  national: string | null
   air: string | null
   planning: string | null
   map: string | null
@@ -103,6 +104,7 @@ function faultsOf(faults: FeedFaults, m: Messages): IntelItem[] {
     { id: "fault-river", score: 340_000, title: m.riverFailed, detail: faults.river },
     { id: "fault-buses", score: 330_000, title: m.busPositionsFailed, detail: faults.buses },
     { id: "fault-cycles", score: 200_000, title: m.cyclesFailed, detail: faults.cycles },
+    { id: "fault-national", score: 190_000, title: m.nationalFailed, detail: faults.national },
     { id: "fault-weather", score: 160_000, title: m.faultWeather, detail: faults.weather },
     { id: "fault-air", score: 120_000, title: m.airFailed, detail: faults.air },
     { id: "fault-planning", score: 100_000, title: m.planningFailed, detail: faults.planning },

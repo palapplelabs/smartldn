@@ -6,7 +6,8 @@ import { isJamCamUrl } from "@/lib/jamcams"
 import { isSpeedBand } from "@/lib/speed"
 import { clearBoardFault, markBoardFault } from "@/lib/board-status"
 import { routesWithoutArrival } from "@/lib/stop-routes"
-import type { BusCall, LineStatus, LiftOutage, RailCalling, RailResponse, SpeedBand, VehicleTrip } from "@/lib/types"
+import { departureState } from "@/lib/national-rail"
+import type { BusCall, LineStatus, LiftOutage, NationalBoard, NationalCall, RailCalling, RailResponse, SpeedBand, VehicleTrip } from "@/lib/types"
 import { tripCollection } from "@/lib/vehicle-trip"
 
 export type TransitContext = { lines: LineStatus[]; lifts: LiftOutage[] }
@@ -140,6 +141,125 @@ export function stationPopup(
   if (!anyTrain && lines.length === 0) card.body.append(paragraph("city-card-copy", m.railNoTrain))
   else card.body.append(board)
   return card.root
+}
+
+// A National Rail station: its live departures from Darwin, each of which opens
+// to the stops still ahead. "Also here" switches to the TfL card of a Tube,
+// Elizabeth line or Overground station at the same place.
+export function nationalStationPopup(
+  properties: GeoJSON.GeoJsonProperties,
+  m: Messages,
+  alsoHere: { label: string; open: () => void }[] = [],
+): HTMLElement {
+  const crs = textProp(properties, "crs")
+  const card = openCard(textProp(properties, "name") || m.national)
+  const operator = textProp(properties, "operator")
+  const stepFree = m.nationalStepFree(textProp(properties, "stepFree"))
+  const detail = [m.national, operator, stepFree].filter(Boolean).join(" · ")
+  card.head.append(paragraph("city-card-detail", detail))
+  for (const other of alsoHere) {
+    const button = text("button", "city-card-switch", `${m.nationalAlsoHere}: ${other.label}`)
+    button.type = "button"
+    button.addEventListener("click", other.open)
+    card.head.append(button)
+  }
+  for (const alert of listProp(properties, "alerts").slice(0, 2)) card.body.append(paragraph("city-card-copy city-card-alert", alert))
+  const board = document.createElement("div")
+  board.className = "city-card-board"
+  board.append(paragraph("city-card-copy", m.boardLoading))
+  card.body.append(board, paragraph("city-card-aside", m.nationalCredit))
+  void fetch(withBase(`/api/national/board?crs=${encodeURIComponent(crs)}`), { cache: "no-store" })
+    .then((response) => response.json())
+    .then((payload: unknown) => {
+      if (!board.isConnected) return
+      const live = readNationalBoard(payload)
+      if (!live) {
+        board.replaceChildren(paragraph("city-card-copy", m.nationalBoardFailed))
+        return
+      }
+      paintNationalBoard(board, live, m)
+    })
+    .catch(() => {
+      if (board.isConnected) board.replaceChildren(paragraph("city-card-copy", m.nationalBoardFailed))
+    })
+  return card.root
+}
+
+function paintNationalBoard(board: HTMLElement, live: NationalBoard, m: Messages) {
+  board.replaceChildren()
+  for (const notice of live.notices.slice(0, 1)) board.append(paragraph("city-card-copy city-card-alert", notice))
+  if (live.departures.length === 0) {
+    board.append(paragraph("city-card-copy", m.nationalNoTrains))
+    return
+  }
+  for (const train of live.departures) {
+    const state = departureState(train)
+    const row = document.createElement("div")
+    row.className = "city-card-call city-card-call-open"
+    row.tabIndex = 0
+    row.setAttribute("role", "button")
+    row.setAttribute("aria-expanded", "false")
+    const when = text("span", "city-card-call-when", state.label)
+    when.style.color = toneColour(state.tone)
+    const kind = [train.platform ? m.nationalPlatform(train.platform) : "", train.operator, train.coaches ? m.nationalCoaches(train.coaches) : ""].filter(Boolean).join(" · ")
+    row.append(text("span", "city-card-call-route", train.scheduled), text("span", "city-card-call-dest", train.destination), when)
+    if (kind) row.append(text("span", "city-card-call-kind", kind))
+    const stops = document.createElement("div")
+    stops.className = "city-card-stops"
+    stops.hidden = true
+    if (train.reason && state.tone !== "green") stops.append(paragraph("city-card-copy", train.reason))
+    let loaded = false
+    const toggle = () => {
+      stops.hidden = !stops.hidden
+      row.setAttribute("aria-expanded", String(!stops.hidden))
+      if (stops.hidden || loaded) return
+      loaded = true
+      const list = document.createElement("div")
+      list.append(paragraph("city-card-copy", m.boardLoading))
+      stops.append(list)
+      void fetch(withBase(`/api/national/service?id=${encodeURIComponent(train.id)}`), { cache: "no-store" })
+        .then((response) => response.json())
+        .then((payload: unknown) => paintCallingPoints(list, readCallingPoints(payload), m))
+        .catch(() => paintCallingPoints(list, null, m))
+    }
+    row.addEventListener("click", toggle)
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return
+      event.preventDefault()
+      toggle()
+    })
+    board.append(row, stops)
+  }
+}
+
+function paintCallingPoints(list: HTMLElement, calls: NationalCall[] | null, m: Messages) {
+  if (!list.isConnected) return
+  if (!calls || calls.length === 0) {
+    list.replaceChildren(paragraph("city-card-copy", m.nationalCallingFailed))
+    return
+  }
+  list.replaceChildren(paragraph("city-card-section", m.nationalCallingAt))
+  for (const call of calls) {
+    const state = departureState(call)
+    const row = serviceRow(call.name, call.scheduled)
+    if (state.tone !== "green") {
+      const note = text("span", "city-card-call-kind", state.label)
+      note.style.color = toneColour(state.tone)
+      row.append(note)
+    }
+    list.append(row)
+  }
+}
+
+function readNationalBoard(payload: unknown): NationalBoard | null {
+  if (typeof payload !== "object" || payload === null || !("ok" in payload) || payload.ok !== true || !("board" in payload)) return null
+  const board = payload.board as NationalBoard | null
+  return board && Array.isArray(board.departures) && Array.isArray(board.notices) ? board : null
+}
+
+function readCallingPoints(payload: unknown): NationalCall[] | null {
+  if (typeof payload !== "object" || payload === null || !("ok" in payload) || payload.ok !== true || !("calls" in payload)) return null
+  return Array.isArray(payload.calls) ? (payload.calls as NationalCall[]) : null
 }
 
 const crowdingSeen = new Map<string, { at: number; percent: number | null }>()

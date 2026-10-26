@@ -27,6 +27,7 @@ export const WATCH_HITS = [
   "cycles",
   "planning",
   "air",
+  "national-stations",
 ]
 
 const MODE_STYLE: Record<RailMode, { station: string; ring: string; credit: string; minzoom: number }> = {
@@ -55,6 +56,8 @@ export function layerIds(kind: WatchLayer): string[] {
       return ["bus-trip-route", "bus-trip-stops", "bus-stops", "bus-stop-label", "bus-vehicles", "bus-vehicle-label"]
     case "cycles":
       return ["cycles"]
+    case "national":
+      return ["national-stations"]
     case "planning":
       return ["planning"]
     case "air":
@@ -86,6 +89,7 @@ export function mountDataLayers(map: Map) {
   map.addSource("bus-trip", { type: "geojson", data: EMPTY })
   map.addSource("bus-vehicle-labels", { type: "geojson", data: EMPTY })
   map.addSource("cycles", { type: "geojson", data: EMPTY })
+  map.addSource("national-stations", { type: "geojson", data: EMPTY, attribution: "National Rail Enquiries" })
   map.addSource("planning", { type: "geojson", data: EMPTY, attribution: "© Greater London Authority" })
   map.addSource("air", { type: "geojson", data: EMPTY, attribution: "© Imperial College London" })
   const before = overlaySlot(map)
@@ -298,6 +302,21 @@ function addPointLayers(map: Map, before: string | undefined) {
     },
   }, before)
   addStopLabel(map, "bus-vehicle-label", "bus-vehicle-labels", LABEL_MIN_ZOOM, false)
+  // National Rail stations: a cream disc with a dark ring, apart from the Tube's
+  // white roundels. Many outer stations are the only rail in their area.
+  addOverlay(map, {
+    id: "national-stations",
+    type: "circle",
+    source: "national-stations",
+    minzoom: 10,
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 2.6, 13, 4.5, 16, 7],
+      "circle-color": "#F5F0E6",
+      "circle-stroke-color": "#1D2B3A",
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 10, 1.2, 15, 2.2],
+      "circle-pitch-alignment": "map",
+    },
+  }, before)
   addOverlay(map, {
     id: "cycles",
     type: "circle",

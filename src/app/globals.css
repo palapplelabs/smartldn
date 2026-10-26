@@ -562,6 +562,43 @@ html[data-locale^="zh-"] .uppercase {
     @apply font-sans;
   }
 }
+/* National Rail station card. */
+.city-card-switch {
+  display: inline-block;
+  margin: 6px 6px 0 0;
+  border: 1px solid #c9d6e0;
+  background: #f3f7fa;
+  padding: 2px 8px;
+  color: #0f4c81;
+  font-size: 12px;
+  cursor: pointer;
+}
+.city-card-switch:hover {
+  background: #e6eef5;
+}
+.city-card-switch:focus-visible,
+.city-card-call-open:focus-visible {
+  outline: 2px solid #0f4c81;
+  outline-offset: 1px;
+}
+.city-card-alert {
+  color: #8a5a00;
+}
+.city-card-call-open {
+  cursor: pointer;
+}
+.city-card-call-open:hover {
+  background: #f3f7fa;
+}
+.city-card-stops {
+  margin: 0 0 6px 6px;
+  border-left: 2px solid #e7edf2;
+  padding-left: 10px;
+}
+.city-card-stops[hidden] {
+  display: none;
+}
+
 /* The place picked in the search box. */
 .search-pin {
   display: flex;

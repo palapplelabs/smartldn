@@ -13,6 +13,7 @@ const LAYER_IDS: readonly WatchLayer[] = [
   "bus",
   "river",
   "cycles",
+  "national",
   "planning",
   "air",
 ]
@@ -43,6 +44,7 @@ export const PREFERENCE_DEFAULTS: Preferences = {
     bus: true,
     river: true,
     cycles: true,
+    national: true,
     planning: false,
     air: false,
   },

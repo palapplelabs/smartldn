@@ -27,6 +27,7 @@ import {
   cyclePopup,
   disruptionPopup,
   planningPopup,
+  nationalStationPopup,
   stationPopup,
   trainPopup,
   type TransitContext,
@@ -41,7 +42,7 @@ import type { Messages } from "@/lib/i18n"
 import { lineRecord, linesThrough, stationCollection, stationPoint, stationRecord, type RailMode } from "@/lib/rail-network"
 import { beginPush, endPush, pushReady, type PushGate } from "@/lib/frame-push"
 import { advanceRuns, mergeRuns, runCollection, runsFromTrains, type TrainRun } from "@/lib/train-run"
-import type { AirSite, Basemap, BusResponse, BusVehicle, Corridor, CycleDock, PlanningApp, RailResponse, SearchPlace, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
+import type { AirSite, Basemap, BusResponse, BusVehicle, Corridor, CycleDock, NationalStation, PlanningApp, RailResponse, SearchPlace, SpeedBand, WatchLayer, WatchLayers } from "@/lib/types"
 
 // Turbopack rewrites MapLibre's own worker URL into a chunk the worker cannot run.
 setWorkerUrl(withBase("/maplibre/maplibre-gl-worker.mjs"))
@@ -70,6 +71,8 @@ const LABEL_REFRESH_MS = 700
 // Buses move a few metres a second, so five redraws a second look smooth.
 const BUS_FRAME_MS = 200
 const BUS_LABEL_CAP = 60
+// How far around a click to look for a second station at the same place.
+const HIT_SLOP_PX = 6
 // Ten pushes a second still reads as smooth motion for dots and trains.
 const PHONE_PUSH_MS = 100
 
@@ -201,6 +204,7 @@ type CityMapProps = {
   bus: BusResponse | null
   buses: BusVehicle[] | null
   cycles: CycleDock[] | null
+  nationalStations: NationalStation[] | null
   planning: PlanningApp[] | null
   air: AirSite[] | null
   warningAreas: GeoJSON.FeatureCollection | null
@@ -214,7 +218,7 @@ type CityMapProps = {
   disabled?: boolean
 }
 
-const ALL_LAYERS: WatchLayer[] = ["roads", "cameras", "works", "incidents", "charges", "rail", "light", "bus", "river", "cycles", "planning", "air"]
+const ALL_LAYERS: WatchLayer[] = ["roads", "cameras", "works", "incidents", "charges", "rail", "light", "bus", "river", "cycles", "national", "planning", "air"]
 
 export function CityMap({
   corridors,
@@ -226,6 +230,7 @@ export function CityMap({
   bus,
   buses,
   cycles,
+  nationalStations,
   planning,
   air,
   warningAreas,
@@ -644,6 +649,7 @@ export function CityMap({
       }
       geoJsonSource(map, "bus-stops")?.setData(layers.bus && bus?.ok ? busStopCollection(map, bus, labels) : emptyCollection())
       geoJsonSource(map, "cycles")?.setData(layers.cycles && cycles ? cycleCollection(cycles) : emptyCollection())
+      geoJsonSource(map, "national-stations")?.setData(layers.national && nationalStations ? nationalCollection(nationalStations) : emptyCollection())
       geoJsonSource(map, "planning")?.setData(layers.planning && planning ? planningCollection(planning) : emptyCollection())
       geoJsonSource(map, "air")?.setData(layers.air && air ? airCollection(air) : emptyCollection())
       geoJsonSource(map, "warning-areas")?.setData(warningAreas ?? emptyCollection())
@@ -653,7 +659,7 @@ export function CityMap({
     return () => {
       map.off("zoomend", paint)
     }
-  }, [air, bus, cameras, cycles, disabled, incidents, warningAreas, layers.air, layers.bus, layers.cycles, layers.planning, mapReady, planning, rail, styleEpoch, works])
+  }, [air, bus, cameras, cycles, disabled, incidents, warningAreas, layers.air, layers.bus, layers.cycles, layers.national, layers.planning, mapReady, nationalStations, planning, rail, styleEpoch, works])
 
   useEffect(() => {
     const map = mapRef.current
@@ -912,10 +918,42 @@ function bindOverlayClicks(
     popups[`${mode}-trains`] = train
     popups[`${mode}-train-label`] = train
   }
+  // Big stations are both a TfL station and a National Rail station at one spot.
+  // The National Rail card opens and offers the TfL card as "Also here".
+  const near = (point: { x: number; y: number }): [[number, number], [number, number]] => [
+    [point.x - HIT_SLOP_PX, point.y - HIT_SLOP_PX],
+    [point.x + HIT_SLOP_PX, point.y + HIT_SLOP_PX],
+  ]
+  const tflStations = RAIL_MODES.map((mode) => `${mode}-stations`).filter((layerId) => map.getLayer(layerId))
+  const nationalHere = (point: { x: number; y: number }) =>
+    map.getLayer("national-stations") != null && map.queryRenderedFeatures(near(point), { layers: ["national-stations"] }).length > 0
+  if (map.getLayer("national-stations")) {
+    map.on("click", "national-stations", (event: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+      const feature = event.features?.[0]
+      if (!feature) return
+      const seen = new Set<string>()
+      const alsoHere = map.queryRenderedFeatures(near(event.point), { layers: tflStations }).flatMap((other) => {
+        const mode = other.layer.id.replace(/-stations$/, "") as RailMode
+        const key = `${mode}:${String(other.properties?.code ?? "")}`
+        if (seen.has(key)) return []
+        seen.add(key)
+        // TfL can list one place as two stations (Stratford: Tube, and Elizabeth
+        // line with Overground), so each button names its lines.
+        const lines = linesThrough(String(other.properties?.code ?? ""), mode).map((line) => lineRecord(line)?.name ?? line)
+        const name = typeof other.properties?.name === "string" ? other.properties.name : ""
+        return [{ label: lines.length > 0 ? lines.join(", ") : `${name} (${copyRef.current[mode]})`, open: () => showPopup(event.lngLat, stationPopup(other.properties ?? null, railRef.current[mode], transitRef.current, mode, copyRef.current)) }]
+      })
+      showPopup(event.lngLat, nationalStationPopup(feature.properties ?? null, copyRef.current, alsoHere))
+    })
+  }
   for (const layerId of watchLayers) {
     const render = popups[layerId]
     if (!render) continue
-    map.on("click", layerId, (event) => openFeature(showPopup, event, render))
+    const yields = tflStations.includes(layerId) || layerId.endsWith("-station-label")
+    map.on("click", layerId, (event) => {
+      if (yields && nationalHere(event.point)) return
+      openFeature(showPopup, event, render)
+    })
   }
   for (const layerId of ["corridor-line", ...watchLayers]) {
     map.on("mouseenter", layerId, () => {
@@ -945,6 +983,17 @@ function busStopCollection(map: Map, board: BusResponse, labels: boolean): GeoJS
         },
       }
     }),
+  }
+}
+
+function nationalCollection(stations: NationalStation[]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: stations.map((station) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [station.lng, station.lat] },
+      properties: { crs: station.crs, name: station.name, operator: station.operator, stepFree: station.stepFree, alerts: JSON.stringify(station.alerts) },
+    })),
   }
 }
 

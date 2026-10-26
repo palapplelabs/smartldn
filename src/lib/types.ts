@@ -281,6 +281,63 @@ export type PlanningResponse = {
   apps: PlanningApp[]
 }
 
+export type NationalStation = {
+  crs: string
+  name: string
+  lng: number
+  lat: number
+  operator: string
+  // Step-free access category, A (all platforms) to C (none), or "" if unknown.
+  stepFree: string
+  alerts: string[]
+}
+
+export type NationalStationsResponse = {
+  ok: boolean
+  error?: string
+  stations: NationalStation[]
+}
+
+export type NationalDeparture = {
+  id: string
+  scheduled: string
+  expected: string
+  destination: string
+  platform: string
+  operator: string
+  cancelled: boolean
+  reason: string
+  coaches: number | null
+}
+
+export type NationalBoard = {
+  crs: string
+  name: string
+  generatedAt: string
+  departures: NationalDeparture[]
+  notices: string[]
+}
+
+export type NationalBoardResponse = {
+  ok: boolean
+  error?: string
+  board: NationalBoard | null
+}
+
+export type NationalCall = {
+  name: string
+  crs: string
+  scheduled: string
+  expected: string
+  cancelled: boolean
+}
+
+export type NationalServiceResponse = {
+  ok: boolean
+  error?: string
+  calls: NationalCall[]
+}
+
 export type SearchPlace = {
   id: string
   name: string
@@ -308,6 +365,7 @@ export type WatchLayer =
   | "bus"
   | "river"
   | "cycles"
+  | "national"
   | "planning"
   | "air"
 
